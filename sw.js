@@ -1,5 +1,5 @@
 /* Service Worker do Leitura — offline-first com atualização pela rede */
-const CACHE = 'leitura-v1';
+const CACHE = 'leitura-v2';
 const SHELL = [
   './',
   './index.html',
