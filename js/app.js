@@ -51,6 +51,8 @@ const els = {
   sharedList: $('#sharedList'), sharedEmpty: $('#sharedEmpty'), sharedCount: $('#sharedCount'),
   sharedFile: $('#sharedFile'), btnSharedRefresh: $('#btnSharedRefresh'),
   btnSharedUpload: $('#btnSharedUpload'),
+  uploadBox: $('#uploadBox'), uploadName: $('#uploadName'),
+  uploadPct: $('#uploadPct'), uploadFill: $('#uploadFill'),
   btnEntrar: $('#btnEntrar'), btnAuthTop: $('#btnAuthTop'),
   authUser: $('#authUser'), userAva: $('#userAva'), userName: $('#userName'), userRole: $('#userRole'),
   authModal: $('#authModal'), authTitle: $('#authTitle'), authClose: $('#authClose'),
@@ -1628,9 +1630,14 @@ function renderStats() {
 function makeProgressBar() {
   const bar = document.createElement('div');
   bar.className = 'import-bar';
-  bar.innerHTML = '<i></i>';
+  bar.innerHTML = '<i></i><u>0%</u>';
   document.body.appendChild(bar);
-  return { set: (p) => { bar.firstChild.style.width = Math.round(p * 100) + '%'; }, done: () => setTimeout(() => bar.remove(), 400) };
+  const fill = bar.querySelector('i');
+  const pct = bar.querySelector('u');
+  return {
+    set: (p) => { const v = Math.round(p * 100); fill.style.width = v + '%'; pct.textContent = v + '%'; },
+    done: () => setTimeout(() => bar.remove(), 400)
+  };
 }
 
 function blobToDataURL(b) {
@@ -2050,8 +2057,9 @@ if (els.dropzone) {
   els.dropzone.onclick = (e) => { if (!e.target.closest('button')) openPicker(); };
 }
 els.fileInput.onchange = async () => {
-  const files = els.fileInput.files;
+  const files = [...els.fileInput.files];   /* copia antes de limpar o input */
   els.fileInput.value = '';
+  if (!files.length) return;
   if (!soDono('adicionar livros')) return;
   await importFiles(files);
 };
@@ -2622,25 +2630,62 @@ async function baixarShared(livro) {
   }
 }
 
+function mostrarUpload(nome, frac) {
+  if (!els.uploadBox) return;
+  const pct = Math.max(0, Math.min(100, Math.round(frac * 100)));
+  els.uploadName.textContent = 'Enviando "' + nome + '"';
+  els.uploadPct.textContent = pct + '%';
+  els.uploadFill.style.width = pct + '%';
+  els.uploadBox.hidden = false;
+}
+
+function mostrarUploadSalvando() {
+  if (!els.uploadBox) return;
+  els.uploadName.textContent = 'Salvando no servidor…';
+  els.uploadPct.textContent = '100%';
+  els.uploadFill.style.width = '100%';
+  els.uploadBox.hidden = false;
+}
+
+function esconderUpload() { if (els.uploadBox) els.uploadBox.hidden = true; }
+
+/* Envio com porcentagem real (XMLHttpRequest reporta o progresso do upload) */
+function enviarComProgresso(file, aoProgresso) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', SHARED_API + '/enviar');
+    xhr.setRequestHeader('X-Nome', file.name);
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+    if (token) xhr.setRequestHeader('X-Sessao', token);
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable && aoProgresso) aoProgresso(e.loaded / e.total); };
+    xhr.onload = () => {
+      let d = {};
+      try { d = JSON.parse(xhr.responseText); } catch (e) {}
+      if (xhr.status >= 200 && xhr.status < 300) resolve(d);
+      else reject(new Error(d.erro || ('Erro ' + xhr.status)));
+    };
+    xhr.onerror = () => reject(new Error('Falha na conexão.'));
+    xhr.ontimeout = () => reject(new Error('Tempo esgotado no envio.'));
+    xhr.send(file);
+  });
+}
+
 async function enviarShared(file) {
   if (!exigirLogin('enviar livros')) return;
   if (!ehAdmin()) { toast('Só o dono da biblioteca pode enviar livros.', 4500); return; }
   if (file.size > 90 * 1024 * 1024) { toast('Arquivo maior que 90 MB.', 4000); return; }
-  toast(`Enviando "${file.name}"...`, 6000);
+  mostrarUpload(file.name, 0);
   try {
-    await apiShared('/enviar', {
-      method: 'POST',
-      headers: {
-        'X-Nome': file.name,
-        'Content-Type': file.type || 'application/octet-stream'
-      },
-      body: file
-    });
+    await enviarComProgresso(file, (f) => mostrarUpload(file.name, f));
+    mostrarUploadSalvando();
+    await new Promise(r => setTimeout(r, 250));
+    esconderUpload();
     toast('Livro enviado para a biblioteca compartilhada!', 4500);
     sharedCache = null;
     await carregarShared(true);
     renderSharedBody();
   } catch (e) {
+    esconderUpload();
     toast('Erro ao enviar: ' + e.message, 5000);
   }
 }

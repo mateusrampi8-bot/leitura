@@ -1154,6 +1154,25 @@ mark.hl[data-c="b"] { background: #b7d1f2; }
 
 .import-bar { position: fixed; left: 0; right: 0; top: 0; height: 3px; z-index: 95; background: transparent; }
 .import-bar i { display: block; height: 100%; background: var(--sage); width: 0; transition: .2s; }
+.import-bar u {
+  position: fixed; top: 12px; right: 14px; z-index: 96;
+  background: var(--surface); border: 1px solid var(--border); color: var(--sage-deep);
+  font: 600 13px var(--font); text-decoration: none;
+  padding: 5px 12px; border-radius: 999px; box-shadow: var(--shadow-sm);
+}
+
+/* Caixa de progresso do envio para a biblioteca compartilhada */
+.upload-box {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+  z-index: 97; width: min(430px, calc(100vw - 32px));
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 14px 16px; box-shadow: var(--shadow-card);
+}
+.upload-box-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
+.upload-box-name { font-size: 14px; color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-box-pct { font-size: 15px; color: var(--sage-deep); min-width: 46px; text-align: right; }
+.upload-box-bar { height: 8px; background: var(--sage-50); border-radius: 999px; overflow: hidden; }
+.upload-box-bar i { display: block; height: 100%; width: 0; background: var(--sage); border-radius: 999px; transition: width .18s; }
 
 /* ---------------- Biblioteca compartilhada ---------------- */
 #sharedList .list-item.shared {

@@ -668,6 +668,13 @@
 
 <input type="file" id="fileInput" multiple hidden>
 <input type="file" id="fileBackup" accept=".zip,application/zip" hidden>
+<div class="upload-box" id="uploadBox" hidden>
+  <div class="upload-box-top">
+    <span class="upload-box-name" id="uploadName">Enviando…</span>
+    <strong class="upload-box-pct" id="uploadPct">0%</strong>
+  </div>
+  <div class="upload-box-bar"><i id="uploadFill"></i></div>
+</div>
 <div class="toast" id="toast" hidden></div>
 
 <script src="lib/pdf.min.js"></script>
