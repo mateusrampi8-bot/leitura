@@ -866,8 +866,10 @@ async function lerComKokoro(voz, partes) {
   const tocar = async (buf) => {
     try {
       const ctx = ctxAudio();
+      if (ctx.state === 'suspended') { try { await ctx.resume(); } catch (e) {} }
       const audio = await ctx.decodeAudioData(buf);
       if (!speaking || meuId !== kokoroLoop) return false;
+      if (ctx.state !== 'running') return false;      /* celular bloqueou o áudio: não trava */
       const noite = noiteVoz();
       const fonte = ctx.createBufferSource();
       fonte.buffer = audio;
@@ -897,12 +899,26 @@ async function lerComKokoro(voz, partes) {
   };
 
   let idx = 0;
+  const buscarParte = (parte) => {
+    const url = vozBase + '?texto=' + encodeURIComponent(parte) +
+      '&voz=' + encodeURIComponent(voz) + '&vel=' + vozVel();
+    const tentar = () => fetch(url, { signal: ac.signal })
+      .then(async resp => {
+        /* Google às vezes recusa por excesso: espera um pouco e tenta de novo */
+        if (!resp.ok && (resp.status === 429 || resp.status >= 500)) {
+          await new Promise(r => setTimeout(r, 900));
+          const r2 = await fetch(url, { signal: ac.signal });
+          if (!r2.ok) throw new Error('HTTP ' + r2.status);
+          return r2.arrayBuffer();
+        }
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.arrayBuffer();
+      });
+    return tentar();
+  };
   const proximaBusca = () => {
     if (idx >= partes.length) return null;
-    const parte = partes[idx++];
-    const p = fetch(vozBase + '?texto=' + encodeURIComponent(parte) +
-      '&voz=' + encodeURIComponent(voz) + '&vel=' + vozVel(), { signal: ac.signal })
-      .then(resp => { if (!resp.ok) throw new Error('HTTP ' + resp.status); return resp.arrayBuffer(); });
+    const p = buscarParte(partes[idx++]);
     p.catch(() => {});                 /* evita rejeição não tratada se pararmos no meio */
     return p;
   };
@@ -915,7 +931,15 @@ async function lerComKokoro(voz, partes) {
       /* já busca o próximo trecho enquanto o atual é falado (sem pausa entre frases) */
       pend = (speaking && meuId === kokoroLoop) ? proximaBusca() : null;
       const ok = await tocar(buf);
-      if (!ok) return;
+      if (!ok) {
+        /* não conseguiu tocar o áudio: avisa e passa para a voz do sistema */
+        if (meuId !== kokoroLoop || !speaking) return;
+        kokoroFalhou = true;
+        toast('Não consegui tocar o áudio — usando a voz do sistema.');
+        setSpeaking(false);
+        speakReader();
+        return;
+      }
     }
   } catch (e) {
     if (meuId !== kokoroLoop || !speaking) return;
@@ -934,7 +958,11 @@ async function speakReader() {
   /* nuvem aceita no máx. 200 caracteres por chamada */
   const partes = coletarPartes(aud ? (vozBase === SHARED_API + '/voz' ? 180 : 220) : 140);
   if (!partes) { toast('Nada para ler nesta página.'); return; }
-  if (aud) { await lerComKokoro(aud, partes); return; }
+  if (aud) {
+    try { ctxAudio(); } catch (e) {}      /* cria e destrava o áudio dentro do clique (exigência do celular) */
+    await lerComKokoro(aud, partes);
+    return;
+  }
 
   if (!('speechSynthesis' in window)) { toast('Leitura em voz alta não suportada neste navegador.'); return; }
   await esperarVoices();
