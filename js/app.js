@@ -50,7 +50,18 @@ const els = {
   mTagNew: $('#mTagNew'), mTagAdd: $('#mTagAdd'), mStars: $('#mStars'),
   sharedList: $('#sharedList'), sharedEmpty: $('#sharedEmpty'), sharedCount: $('#sharedCount'),
   sharedFile: $('#sharedFile'), btnSharedRefresh: $('#btnSharedRefresh'),
-  btnSharedUpload: $('#btnSharedUpload'), btnSharedKey: $('#btnSharedKey')
+  btnSharedUpload: $('#btnSharedUpload'),
+  btnEntrar: $('#btnEntrar'), btnAuthTop: $('#btnAuthTop'),
+  authUser: $('#authUser'), userAva: $('#userAva'), userName: $('#userName'), userRole: $('#userRole'),
+  authModal: $('#authModal'), authTitle: $('#authTitle'), authClose: $('#authClose'),
+  authTabs: $('#authTabs'), fNome: $('#fNome'), fCodigo: $('#fCodigo'),
+  authNome: $('#authNome'), authEmail: $('#authEmail'), authSenha: $('#authSenha'),
+  authCodigo: $('#authCodigo'), authErro: $('#authErro'), authHint: $('#authHint'),
+  authSubmit: $('#authSubmit'), authCancel: $('#authCancel'),
+  googleBtn: $('#googleBtn'), googleAlt: $('#googleAlt'),
+  notesModal: $('#notesModal'), socTitle: $('#socTitle'), socList: $('#socList'),
+  socText: $('#socText'), socSave: $('#socSave'), socCancel: $('#socCancel'),
+  socClose: $('#socClose')
 };
 
 let items = [];
@@ -2138,29 +2149,182 @@ els.fileBackup.onchange = async () => {
 
 /* ================= Biblioteca compartilhada (Cloudflare) ================= */
 const SHARED_API = 'https://leitura-api.leitura-biblioteca.workers.dev';
-const CHAVE_STORE = 'leitura:chavecompartilhada';
+const TOKEN_STORE = 'leitura:token';
 const SHARED_EMPTY_HTML = els.sharedEmpty ? els.sharedEmpty.innerHTML : '';
 let sharedCache = null;
 let sharedErro = '';
 let sharedPromise = null;
+let token = localStorage.getItem(TOKEN_STORE) || '';
+let usuario = null;
+let authModo = 'entrar';
+let configAuth = null;
+let socLivro = null;
 
-const sharedKey = () => localStorage.getItem(CHAVE_STORE) || '';
+const ehAdmin = () => !!usuario && usuario.role === 'admin';
 
-function pedirChave() {
-  const atual = sharedKey();
-  const v = prompt('Chave de acesso para enviar ou excluir livros:', atual);
-  if (v === null) return atual;
-  const nova = (v || '').trim();
-  if (nova) localStorage.setItem(CHAVE_STORE, nova);
-  else localStorage.removeItem(CHAVE_STORE);
-  return nova;
-}
-
-async function apiShared(path, opts) {
-  const res = await fetch(SHARED_API + path, opts);
+async function apiShared(path, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  if (token) headers['X-Sessao'] = token;
+  const res = await fetch(SHARED_API + path, { ...opts, headers });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.erro || ('Erro ' + res.status));
   return data;
+}
+
+/* ---------------- Conta (entrar / cadastrar / Google) ---------------- */
+function mostrarErroAuth(msg) {
+  els.authErro.textContent = msg || '';
+  els.authErro.hidden = !msg;
+}
+
+function atualizarAbas() {
+  [...els.authTabs.children].forEach(b => b.classList.toggle('active', b.dataset.tab === authModo));
+  const cad = authModo === 'cadastrar';
+  els.fNome.hidden = !cad;
+  els.fCodigo.hidden = !cad;
+  els.authTitle.textContent = cad ? 'Criar conta' : 'Entrar';
+  els.authSubmit.textContent = cad ? 'Criar conta' : 'Entrar';
+  els.authHint.textContent = cad ? 'Mínimo de 6 caracteres na senha.' : 'Use seu e-mail e senha.';
+  els.authSenha.autocomplete = cad ? 'new-password' : 'current-password';
+}
+
+function abrirAuth(modo) {
+  authModo = modo || 'entrar';
+  atualizarAbas();
+  mostrarErroAuth('');
+  els.authModal.hidden = false;
+  setTimeout(() => (authModo === 'entrar' ? els.authEmail : els.authNome).focus(), 40);
+  initGoogle();
+}
+
+function fecharAuth() { els.authModal.hidden = true; }
+
+function salvarSessao(res) {
+  token = res.token;
+  usuario = res.usuario;
+  localStorage.setItem(TOKEN_STORE, token);
+  sharedCache = null;
+  fecharAuth();
+  atualizarAuthUi();
+  toast(`Bem-vindo(a), ${usuario.nome}!`);
+}
+
+async function restaurarSessao() {
+  if (!token) { atualizarAuthUi(); return; }
+  try {
+    const r = await apiShared('/auth/eu');
+    usuario = r.usuario;
+  } catch (e) {
+    token = '';
+    usuario = null;
+    localStorage.removeItem(TOKEN_STORE);
+  }
+  atualizarAuthUi();
+}
+
+function sair() {
+  token = '';
+  usuario = null;
+  localStorage.removeItem(TOKEN_STORE);
+  sharedCache = null;
+  atualizarAuthUi();
+  toast('Você saiu da conta.');
+  render();
+}
+
+function atualizarAuthUi() {
+  const logado = !!usuario;
+  if (els.authUser) els.authUser.hidden = !logado;
+  if (els.btnEntrar) els.btnEntrar.hidden = logado;
+  if (els.btnSharedUpload) els.btnSharedUpload.hidden = !ehAdmin();
+  if (logado) {
+    els.userAva.textContent = (usuario.nome || '?').trim().charAt(0).toUpperCase();
+    els.userName.textContent = usuario.nome;
+    els.userRole.textContent = ehAdmin() ? 'Dono da biblioteca' : 'Membro';
+    if (els.btnAuthTop) els.btnAuthTop.textContent = String(usuario.nome).split(' ')[0] + ' · Sair';
+  } else if (els.btnAuthTop) {
+    els.btnAuthTop.textContent = 'Entrar';
+  }
+}
+
+function exigirLogin(para) {
+  if (usuario) return true;
+  toast(`Entre ou crie uma conta para ${para}.`, 3500);
+  abrirAuth('entrar');
+  return false;
+}
+
+function carregarGis() {
+  return new Promise((res) => {
+    if (window.google && window.google.accounts && window.google.accounts.id) return res();
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.onload = res;
+    s.onerror = res;
+    document.head.appendChild(s);
+  });
+}
+
+async function initGoogle() {
+  try {
+    if (!configAuth) configAuth = await apiShared('/auth/config');
+    els.googleBtn.innerHTML = '';
+    if (!configAuth.google) {
+      els.googleAlt.hidden = false;
+      return;
+    }
+    els.googleAlt.hidden = true;
+    await carregarGis();
+    if (!window.google || !window.google.accounts || !window.google.accounts.id) return;
+    google.accounts.id.initialize({
+      client_id: configAuth.google,
+      callback: async (resp) => {
+        try {
+          const r = await apiShared('/auth/google', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credential: resp.credential })
+          });
+          salvarSessao(r);
+          if (view === 'compartilhada') renderShared();
+        } catch (e) { mostrarErroAuth(e.message); }
+      }
+    });
+    google.accounts.id.renderButton(els.googleBtn, {
+      theme: 'outline', size: 'large', width: 230, text: 'continue_with', locale: 'pt-BR'
+    });
+  } catch (e) { /* sem conexão */ }
+}
+
+async function enviarAuth() {
+  mostrarErroAuth('');
+  const email = els.authEmail.value.trim();
+  const senha = els.authSenha.value;
+  if (!email || !senha) { mostrarErroAuth('Preencha e-mail e senha.'); return; }
+  const body = { email, senha };
+  if (authModo === 'cadastrar') {
+    body.nome = els.authNome.value.trim();
+    body.codigo = els.authCodigo.value.trim();
+    if (!body.nome) { mostrarErroAuth('Diga seu nome.'); return; }
+  }
+  els.authSubmit.disabled = true;
+  try {
+    const r = await apiShared(authModo === 'entrar' ? '/auth/entrar' : '/auth/cadastrar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    els.authNome.value = '';
+    els.authEmail.value = '';
+    els.authSenha.value = '';
+    els.authCodigo.value = '';
+    salvarSessao(r);
+    if (view === 'compartilhada') renderShared();
+  } catch (e) {
+    mostrarErroAuth(e.message);
+  } finally {
+    els.authSubmit.disabled = false;
+  }
 }
 
 async function carregarShared(forcar) {
@@ -2211,6 +2375,8 @@ function renderSharedBody() {
   if (!list.length) els.sharedEmpty.innerHTML = SHARED_EMPTY_HTML;
 
   list.forEach(livro => {
+    const up = livro.meuVoto === 1;
+    const down = livro.meuVoto === -1;
     const row = document.createElement('div');
     row.className = 'list-item shared';
     row.innerHTML = `
@@ -2220,11 +2386,24 @@ function renderSharedBody() {
         <span class="li-sub">${extLabel(livro)} · ${fmtBytes(livro.tamanho)} · ${new Date(livro.enviado).toLocaleDateString('pt-BR')}</span>
       </span>
       <span class="li-actions">
+        <button class="vote vote-up ${up ? 'on' : ''}" title="Gostei">
+          <svg viewBox="0 0 24 24"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+          <b>${livro.likes || 0}</b>
+        </button>
+        <button class="vote vote-down ${down ? 'on' : ''}" title="Não gostei">
+          <svg viewBox="0 0 24 24"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+          <b>${livro.dislikes || 0}</b>
+        </button>
+        <button class="btn btn-sm shared-notes" title="Suas anotações sobre este livro">Anotações</button>
         <button class="btn btn-sm btn-primary shared-dl">Baixar</button>
-        <button class="btn btn-sm shared-del" title="Excluir da biblioteca compartilhada">Excluir</button>
+        ${ehAdmin() ? '<button class="btn btn-sm shared-del" title="Excluir da biblioteca compartilhada">Excluir</button>' : ''}
       </span>`;
+    row.querySelector('.vote-up').onclick = () => votar(livro, 1);
+    row.querySelector('.vote-down').onclick = () => votar(livro, -1);
+    row.querySelector('.shared-notes').onclick = () => abrirNotas(livro);
     row.querySelector('.shared-dl').onclick = () => baixarShared(livro);
-    row.querySelector('.shared-del').onclick = () => excluirShared(livro);
+    const del = row.querySelector('.shared-del');
+    if (del) del.onclick = () => excluirShared(livro);
     els.sharedList.appendChild(row);
   });
 }
@@ -2232,6 +2411,103 @@ function renderSharedBody() {
 async function renderShared() {
   await carregarShared(false);
   renderSharedBody();
+}
+
+async function votar(livro, v) {
+  if (!exigirLogin('avaliar os livros')) return;
+  const novo = livro.meuVoto === v ? 0 : v;
+  try {
+    const r = await apiShared(`/livro/${livro.id}/voto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voto: novo })
+    });
+    livro.likes = r.likes;
+    livro.dislikes = r.dislikes;
+    livro.meuVoto = r.meuVoto;
+    renderSharedBody();
+  } catch (e) {
+    toast(e.message, 4500);
+  }
+}
+
+/* ---------------- Anotações (privadas) ---------------- */
+async function abrirNotas(livro) {
+  if (!exigirLogin('usar suas anotações')) return;
+  socLivro = livro;
+  els.socTitle.textContent = 'Anotações';
+  els.socText.value = '';
+  els.notesModal.hidden = false;
+  els.socList.innerHTML = '<p class="muted">Carregando...</p>';
+  try {
+    const d = await apiShared(`/livro/${livro.id}/social`);
+    livro.likes = d.likes;
+    livro.dislikes = d.dislikes;
+    livro.meuVoto = d.meuVoto;
+    renderNotas(d.anotacoes);
+  } catch (e) {
+    els.socList.innerHTML = `<p class="muted">${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function renderNotas(list) {
+  if (!list || !list.length) {
+    els.socList.innerHTML = '<p class="muted">Você ainda não anotou nada neste livro.</p>';
+    return;
+  }
+  els.socList.innerHTML = list.map(a => `
+    <div class="soc-note" data-em="${a.em}">
+      <div class="soc-note-head">
+        <span class="soc-note-date">${new Date(a.em).toLocaleString('pt-BR')}</span>
+        <button class="btn btn-sm soc-note-del">Excluir</button>
+      </div>
+      <p>${escapeHtml(a.texto).replace(/\n/g, '<br>')}</p>
+    </div>`).join('');
+  els.socList.querySelectorAll('.soc-note-del').forEach(b => {
+    b.onclick = () => apagarNota(Number(b.closest('.soc-note').dataset.em));
+  });
+}
+
+async function recarregarNotas() {
+  const d = await apiShared(`/livro/${socLivro.id}/social`);
+  renderNotas(d.anotacoes);
+}
+
+async function apagarNota(em) {
+  if (!socLivro) return;
+  if (!confirm('Excluir esta anotação?')) return;
+  try {
+    await apiShared(`/livro/${socLivro.id}/anotacao?em=${em}`, { method: 'DELETE' });
+    await recarregarNotas();
+    toast('Anotação excluída.');
+  } catch (e) { toast(e.message, 4500); }
+}
+
+async function salvarNota() {
+  if (!socLivro) return;
+  const t = els.socText.value.trim();
+  if (!t) { toast('Escreva a anotação.'); return; }
+  els.socSave.disabled = true;
+  try {
+    await apiShared(`/livro/${socLivro.id}/anotacao`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texto: t })
+    });
+    els.socText.value = '';
+    await recarregarNotas();
+    toast('Anotação salva.');
+  } catch (e) {
+    toast(e.message, 4500);
+  } finally {
+    els.socSave.disabled = false;
+  }
+}
+
+function fecharNotas() {
+  els.notesModal.hidden = true;
+  socLivro = null;
+  if (sharedCache) renderSharedBody();
 }
 
 async function baixarShared(livro) {
@@ -2248,18 +2524,14 @@ async function baixarShared(livro) {
 }
 
 async function enviarShared(file) {
+  if (!exigirLogin('enviar livros')) return;
+  if (!ehAdmin()) { toast('Só o dono da biblioteca pode enviar livros.', 4500); return; }
   if (file.size > 90 * 1024 * 1024) { toast('Arquivo maior que 90 MB.', 4000); return; }
-  let chave = sharedKey();
-  if (!chave) {
-    chave = pedirChave();
-    if (!chave) { toast('Informe a chave de acesso para enviar.'); return; }
-  }
   toast(`Enviando "${file.name}"...`, 6000);
   try {
     await apiShared('/enviar', {
       method: 'POST',
       headers: {
-        'X-Chave': chave,
         'X-Nome': file.name,
         'Content-Type': file.type || 'application/octet-stream'
       },
@@ -2270,34 +2542,33 @@ async function enviarShared(file) {
     await carregarShared(true);
     renderSharedBody();
   } catch (e) {
-    if (/chave/i.test(e.message)) localStorage.removeItem(CHAVE_STORE);
     toast('Erro ao enviar: ' + e.message, 5000);
   }
 }
 
 async function excluirShared(livro) {
+  if (!exigirLogin('excluir livros')) return;
+  if (!ehAdmin()) { toast('Só o dono da biblioteca pode excluir livros.', 4500); return; }
   if (!confirm(`Excluir "${livro.nome}" da biblioteca compartilhada?`)) return;
-  let chave = sharedKey();
-  if (!chave) {
-    chave = pedirChave();
-    if (!chave) { toast('Informe a chave de acesso para excluir.'); return; }
-  }
   try {
-    await apiShared(`/livro/${livro.id}`, { method: 'DELETE', headers: { 'X-Chave': chave } });
+    await apiShared(`/livro/${livro.id}`, { method: 'DELETE' });
     toast('Livro excluído.');
     sharedCache = null;
     await carregarShared(true);
     renderSharedBody();
   } catch (e) {
-    if (/chave/i.test(e.message)) localStorage.removeItem(CHAVE_STORE);
     toast('Erro ao excluir: ' + e.message, 5000);
   }
 }
 
+/* ---------------- Ligações da interface ---------------- */
 if (els.btnSharedRefresh) {
   els.btnSharedRefresh.onclick = () => { sharedCache = null; renderShared(); };
-  els.btnSharedUpload.onclick = () => els.sharedFile.click();
-  els.btnSharedKey.onclick = () => { if (pedirChave()) toast('Chave salva.'); };
+  els.btnSharedUpload.onclick = () => {
+    if (!exigirLogin('enviar livros')) return;
+    if (!ehAdmin()) { toast('Só o dono da biblioteca pode enviar livros.', 4500); return; }
+    els.sharedFile.click();
+  };
   els.sharedFile.onchange = () => {
     const f = els.sharedFile.files[0];
     els.sharedFile.value = '';
@@ -2305,11 +2576,52 @@ if (els.btnSharedRefresh) {
   };
 }
 
+if (els.btnEntrar) els.btnEntrar.onclick = () => abrirAuth('entrar');
+if (els.btnAuthTop) {
+  els.btnAuthTop.onclick = () => {
+    if (usuario) {
+      if (confirm(`Sair da conta de ${usuario.nome}?`)) sair();
+    } else abrirAuth('entrar');
+  };
+}
+if (els.authClose) {
+  els.authClose.onclick = fecharAuth;
+  els.authCancel.onclick = fecharAuth;
+  els.authModal.onclick = (e) => { if (e.target === els.authModal) fecharAuth(); };
+  els.authTabs.onclick = (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    authModo = b.dataset.tab;
+    atualizarAbas();
+    mostrarErroAuth('');
+  };
+  els.authSubmit.onclick = enviarAuth;
+  const enterSub = (e) => { if (e.key === 'Enter') { e.preventDefault(); enviarAuth(); } };
+  els.authEmail.onkeydown = enterSub;
+  els.authSenha.onkeydown = enterSub;
+  els.authNome.onkeydown = enterSub;
+}
+if (els.socClose) {
+  els.socClose.onclick = fecharNotas;
+  els.socCancel.onclick = fecharNotas;
+  els.socSave.onclick = salvarNota;
+  els.notesModal.onclick = (e) => { if (e.target === els.notesModal) fecharNotas(); };
+  els.socText.onkeydown = (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); salvarNota(); }
+  };
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!els.notesModal || !els.notesModal.hidden) fecharNotas();
+  else if (!els.authModal || !els.authModal.hidden) fecharAuth();
+});
+
 /* ================= Início ================= */
 (async function init() {
   setTheme(localStorage.getItem('leitura:tema') === 'dark' ? 'dark' : 'light');
   setReaderMode(localStorage.getItem('leitura:modo') || 'light');
   applyTypePrefs();
+  await restaurarSessao();
   try {
     await DB.open();
     items = await DB.all();
