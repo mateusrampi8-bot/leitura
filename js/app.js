@@ -621,6 +621,7 @@ els.findInput.onkeydown = (e) => {
 };
 
 /* ================= Leitura em voz alta ================= */
+const SHARED_API = 'https://leitura-api.leitura-biblioteca.workers.dev';
 let speaking = false;
 let vozWatchdog = null;
 const VOZ_SEL = 'leitura:voz';
@@ -693,6 +694,9 @@ const VOZES_KOKORO = [
 const VOZES_PIPER = [
   ['faber', 'Faber'], ['jeff', 'Jeff'], ['cadu', 'Cadu'], ['edresson', 'Edresson']
 ];
+const VOZES_NUVEM = [
+  ['google', 'Google pt-BR']
+];
 let vozesAudio = VOZES_KOKORO.map(([id]) => 'kokoro:' + id)
   .concat(VOZES_PIPER.map(([id]) => 'piper:' + id));
 let kokoroPronto = false;
@@ -700,17 +704,20 @@ let kokoroFalhou = false;
 let kokoroAbort = null;
 let kokoroFonte = null;
 let kokoroLoop = 0;
+let vozBase = '/api/voz';          /* servidor local; muda para a nuvem se o local estiver fora */
 let audioCtx = null;
 
 function nomeAudio(val) {
   const partes = String(val).split(':');
-  const lista = partes[0] === 'piper' ? VOZES_PIPER : VOZES_KOKORO;
+  const lista = partes[0] === 'piper' ? VOZES_PIPER
+    : partes[0] === 'nuvem' ? VOZES_NUVEM : VOZES_KOKORO;
   const hit = lista.find(x => x[0] === partes[1]);
   return hit ? hit[1] : (partes[1] || val);
 }
 
 function ehAudio(val) {
-  return val.indexOf('kokoro:') === 0 || val.indexOf('piper:') === 0;
+  return val.indexOf('kokoro:') === 0 || val.indexOf('piper:') === 0 ||
+    val.indexOf('nuvem:') === 0;
 }
 
 /* Modo soneca: voz suave e abafada (grave + volume baixo + filtro) para dormir */
@@ -718,28 +725,50 @@ function noiteVoz() {
   return localStorage.getItem(VOZ_NOITE) === '1';
 }
 
+function aplicarStatusVoz(j, base) {
+  const pronto = !!(j && j.pronto);
+  const antes = vozesAudio.join();
+  const mudouEstado = pronto !== kokoroPronto;
+  if (pronto && Array.isArray(j.vozes) && j.vozes.length) vozesAudio = j.vozes;
+  else if (!pronto) vozesAudio = [];
+  if (pronto) {
+    vozBase = base;
+    kokoroFalhou = false;
+    const salva = localStorage.getItem(VOZ_SEL);
+    if (salva && ehAudio(salva) && vozesAudio.indexOf(salva) === -1) {
+      localStorage.setItem(VOZ_SEL, vozesAudio[0]);   /* a voz salva não existe nesta fonte */
+    }
+  }
+  kokoroPronto = pronto;
+  if (mudouEstado || antes !== vozesAudio.join()) {
+    if (!els.typePanel.hidden) renderVozPop();
+    if (!speaking) els.btnSpeak.title = tituloSpeak();
+  }
+  return pronto;
+}
+
 function checarStatusVoz() {
+  const pegaJson = (r) => (r.ok ? r.json().catch(() => null) : null);
   return fetch('/api/voz/status')
-    .then(r => (r.ok ? r.json() : null))
+    .then(pegaJson)
+    .catch(() => null)
     .then(j => {
-      const pronto = !!(j && j.pronto);
-      if (j && Array.isArray(j.vozes) && j.vozes.length) vozesAudio = j.vozes;
-      if (pronto !== kokoroPronto) {
-        kokoroPronto = pronto;
-        if (!els.typePanel.hidden) renderVozPop();
-        if (!speaking) els.btnSpeak.title = tituloSpeak();
-      }
-      return pronto;
-    })
-    .catch(() => false);
+      if (j && j.pronto) return aplicarStatusVoz(j, '/api/voz');
+      /* local fora do ar (ou site online): usa a voz natural da nuvem */
+      return fetch(SHARED_API + '/voz/status')
+        .then(pegaJson)
+        .catch(() => null)
+        .then(j2 => aplicarStatusVoz(j2, SHARED_API + '/voz'));
+    });
 }
 checarStatusVoz();
 
-/* voz efetiva escolhida: valor 'kokoro:xxx'/'piper:xxx' ou nome da voz do sistema ('' = padrão) */
+/* voz efetiva escolhida: valor 'kokoro:xxx'/'piper:xxx'/'nuvem:xxx' ou nome da voz do sistema ('' = padrão) */
 function vozSel() {
   const salva = localStorage.getItem(VOZ_SEL);
-  if (salva) return salva;
-  return (kokoroPronto && !kokoroFalhou) ? 'kokoro:pf_dora' : '';
+  if (salva && (!ehAudio(salva) || vozesAudio.indexOf(salva) !== -1)) return salva;
+  if (kokoroPronto && !kokoroFalhou) return vozesAudio[0] || '';
+  return '';
 }
 
 function vozAudioAtual() {
@@ -788,7 +817,8 @@ function dividirTexto(s, max) {
 function tituloSpeak() {
   const aud = vozAudioAtual();
   const voz = vozEscolhida();
-  const rot = aud ? (aud.indexOf('piper:') === 0 ? 'Piper · ' : 'Kokoro · ') + nomeAudio(aud) : '';
+  const rot = aud ? (aud.indexOf('piper:') === 0 ? 'Piper · '
+    : aud.indexOf('nuvem:') === 0 ? 'Nuvem · ' : 'Kokoro · ') + nomeAudio(aud) : '';
   return 'Ler em voz alta' + (rot ? ' (' + rot + ')' : voz ? ' (' + voz.name + ')' : '');
 }
 
@@ -841,6 +871,8 @@ async function lerComKokoro(voz, partes) {
       fonte.buffer = audio;
       /* Tom: -100 cents extras no modo soneca (mais grave e lento) */
       fonte.detune.value = Math.round((vozPitch() - 1) * 1200) - (noite ? 100 : 0);
+      /* nuvem não recebe a velocidade do servidor: aplica no próprio áudio */
+      if (voz.indexOf('nuvem:') === 0) fonte.playbackRate = vozVel();
       const ganho = ctx.createGain();
       ganho.gain.value = vozVol() * (noite ? 0.75 : 1);          /* Volume */
       if (noite) {
@@ -866,7 +898,7 @@ async function lerComKokoro(voz, partes) {
   const proximaBusca = () => {
     if (idx >= partes.length) return null;
     const parte = partes[idx++];
-    const p = fetch('/api/voz?texto=' + encodeURIComponent(parte) +
+    const p = fetch(vozBase + '?texto=' + encodeURIComponent(parte) +
       '&voz=' + encodeURIComponent(voz) + '&vel=' + vozVel(), { signal: ac.signal })
       .then(resp => { if (!resp.ok) throw new Error('HTTP ' + resp.status); return resp.arrayBuffer(); });
     p.catch(() => {});                 /* evita rejeição não tratada se pararmos no meio */
@@ -897,7 +929,8 @@ async function speakReader() {
   if (speaking) { setSpeaking(false); return; }
 
   const aud = vozAudioAtual();
-  const partes = coletarPartes(aud ? 220 : 140);
+  /* nuvem aceita no máx. 200 caracteres por chamada */
+  const partes = coletarPartes(aud ? (vozBase === SHARED_API + '/voz' ? 180 : 220) : 140);
   if (!partes) { toast('Nada para ler nesta página.'); return; }
   if (aud) { await lerComKokoro(aud, partes); return; }
 
@@ -950,9 +983,11 @@ function renderVozPop() {
     : '<option value="" disabled>(carregando vozes do sistema…)</option>';
   const temKokoro = vozesAudio.some(v => v.indexOf('kokoro:') === 0);
   const temPiper = vozesAudio.some(v => v.indexOf('piper:') === 0);
+  const temNuvem = vozesAudio.some(v => v.indexOf('nuvem:') === 0);
   els.voiceSel.innerHTML =
     (temKokoro ? `<optgroup label="Kokoro · voz natural pt-BR">${opcoes('kokoro:', 'Kokoro')}</optgroup>` : '') +
     (temPiper ? `<optgroup label="Piper · vozes brasileiras">${opcoes('piper:', 'Piper')}</optgroup>` : '') +
+    (temNuvem ? `<optgroup label="Nuvem · voz natural pt-BR">${opcoes('nuvem:', 'Nuvem')}</optgroup>` : '') +
     `<optgroup label="Vozes do sistema">${grupoSys}</optgroup>`;
   if (!lista.length) esperarVoices().then(() => { if (!els.typePanel.hidden) renderVozPop(); });
 }
@@ -2148,7 +2183,6 @@ els.fileBackup.onchange = async () => {
 };
 
 /* ================= Biblioteca compartilhada (Cloudflare) ================= */
-const SHARED_API = 'https://leitura-api.leitura-biblioteca.workers.dev';
 const TOKEN_STORE = 'leitura:token';
 const SHARED_EMPTY_HTML = els.sharedEmpty ? els.sharedEmpty.innerHTML : '';
 let sharedCache = null;

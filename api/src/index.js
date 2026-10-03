@@ -359,6 +359,31 @@ export default {
         return json({ ok: true });
       }
 
+      /* ----- Voz na nuvem (pt-BR natural) ----- */
+      if (request.method === 'GET' && p === '/voz/status') {
+        return json({ pronto: true, vozes: ['nuvem:google'] });
+      }
+
+      if (request.method === 'GET' && p === '/voz') {
+        const t = (url.searchParams.get('texto') || '').replace(/\s+/g, ' ').trim();
+        if (!t) return erro('Texto vazio.');
+        if (t.length > 200) return erro('Texto longo demais (máx. 200 caracteres).');
+        const alvo = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=pt-br&q=' + encodeURIComponent(t);
+        const r = await fetch(alvo, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+          }
+        });
+        if (!r.ok) return erro('Voz indisponível.', 502);
+        return new Response(r.body, {
+          headers: {
+            'Content-Type': 'audio/mpeg',
+            'Cache-Control': 'public, max-age=86400',
+            ...CORS
+          }
+        });
+      }
+
       return erro('Rota não encontrada', 404);
     } catch (e) {
       return erro(e.message || 'Erro interno', 500);
