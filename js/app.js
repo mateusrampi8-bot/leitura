@@ -1172,6 +1172,7 @@ async function importBackup(file) {
 
 /* ================= Navegação ================= */
 function setView(name) {
+  if (name === 'adicionar' && !soDono('adicionar livros')) name = 'compartilhada';
   view = name;
   els.views.forEach(v => v.classList.toggle('active', v.dataset.view === name));
   $$('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === name));
@@ -1291,20 +1292,23 @@ function renderHome() {
     $('#heroContinue').onclick = () => openItem(hero);
     $('#heroLibrary').onclick = () => setView('biblioteca');
   } else {
+    const dono = ehAdmin();
     els.hero.className = 'hero hero-empty';
     els.hero.innerHTML = `
       <div class="hero-body">
         <span class="hero-label">${items.length ? 'Biblioteca' : 'Bem-vindo'}</span>
-        <h2>${items.length ? 'Nada em andamento agora' : 'Comece sua biblioteca local'}</h2>
+        <h2>${items.length ? 'Nada em andamento agora' : (dono ? 'Comece sua biblioteca local' : 'Bem-vindo ao Leitura')}</h2>
         <p class="hero-meta">${items.length
           ? 'Abra um livro, mangá ou artigo para retomar de onde parou.'
-          : 'Arraste PDFs, EPUBs, imagens, ZIPs de páginas, textos e áudios. Tudo fica só no seu aparelho.'}</p>
+          : dono
+            ? 'Arraste PDFs, EPUBs, imagens, ZIPs de páginas, textos e áudios. Tudo fica só no seu aparelho.'
+            : 'Os livros do dono estão na Biblioteca Compartilhada — baixe um de lá para ler.'}</p>
       </div>
       <div class="hero-actions">
-        <button class="btn btn-primary" id="heroAdd">Adicionar arquivos</button>
+        <button class="btn btn-primary" id="heroAdd">${dono ? 'Adicionar arquivos' : 'Ver compartilhada'}</button>
         ${items.length ? '<button class="btn" id="heroLibrary">Ver biblioteca</button>' : ''}
       </div>`;
-    const a = $('#heroAdd'); if (a) a.onclick = () => setView('adicionar');
+    const a = $('#heroAdd'); if (a) a.onclick = () => setView(dono ? 'adicionar' : 'compartilhada');
     const l = $('#heroLibrary'); if (l) l.onclick = () => setView('biblioteca');
   }
 
@@ -1459,8 +1463,9 @@ function renderLibrary() {
     els.empty.hidden = false;
     els.empty.innerHTML = '<p>Nenhum resultado para esta busca ou filtro.</p>';
   } else if (!items.length) {
-    els.empty.innerHTML =
-      '<p>Sua biblioteca está vazia.</p><p class="muted">Abra a área Adicionar para trazer seus arquivos.</p>';
+    els.empty.innerHTML = ehAdmin()
+      ? '<p>Sua biblioteca está vazia.</p><p class="muted">Abra a área Adicionar para trazer seus arquivos.</p>'
+      : '<p>Nenhum livro aqui ainda.</p><p class="muted">Os livros do dono ficam na Biblioteca Compartilhada — baixe um de lá para ler.</p>';
   }
 }
 
@@ -1994,7 +1999,9 @@ window.addEventListener('resize', () => {
 
 document.addEventListener('click', (e) => {
   const nav = e.target.closest('.nav-item[data-view], .link[data-view], .stat-card[data-view], .btn[data-view]');
-  if (nav) setView(nav.dataset.view);
+  if (!nav) return;
+  if (nav.dataset.view === 'adicionar' && !soDono('adicionar livros')) return;
+  setView(nav.dataset.view);
 });
 
 els.btnBack.onclick = closeReader;
@@ -2026,9 +2033,16 @@ els.btnModeTop.onclick = () => {
   toast(document.documentElement.dataset.theme === 'dark' ? 'Modo noite' : 'Modo claro');
 };
 
-const openPicker = () => els.fileInput.click();
-els.btnAdd.onclick = () => setView('adicionar');
-els.btnAddSide.onclick = () => setView('adicionar');
+/* Só o dono da biblioteca pode adicionar livros (local ou compartilhado) */
+function soDono(acao) {
+  if (ehAdmin()) return true;
+  toast('Só o dono da biblioteca pode ' + acao + '.', 4500);
+  return false;
+}
+
+const openPicker = () => { if (soDono('adicionar livros')) els.fileInput.click(); };
+els.btnAdd.onclick = () => { if (soDono('adicionar livros')) setView('adicionar'); };
+els.btnAddSide.onclick = () => { if (soDono('adicionar livros')) setView('adicionar'); };
 document.addEventListener('click', (e) => {
   if (e.target.closest('#btnPick, #btnPickInner')) openPicker();
 });
@@ -2036,8 +2050,10 @@ if (els.dropzone) {
   els.dropzone.onclick = (e) => { if (!e.target.closest('button')) openPicker(); };
 }
 els.fileInput.onchange = async () => {
-  await importFiles(els.fileInput.files);
+  const files = els.fileInput.files;
   els.fileInput.value = '';
+  if (!soDono('adicionar livros')) return;
+  await importFiles(files);
 };
 
 /* Drag & drop */
@@ -2046,6 +2062,7 @@ let dragDepth = 0;
   if (![...((e.dataTransfer || {}).types || [])].includes('Files')) return;
   e.preventDefault();
   if (ev === 'dragenter') dragDepth++;
+  if (!ehAdmin()) return;                    /* só o dono vê a área de soltar */
   els.dropOverlay.classList.add('show');
   els.dropzone.classList.add('drag');
 }));
@@ -2058,7 +2075,7 @@ document.addEventListener('drop', (e) => {
   dragDepth = 0;
   els.dropOverlay.classList.remove('show');
   els.dropzone.classList.remove('drag');
-  if (e.dataTransfer && e.dataTransfer.files.length) importFiles(e.dataTransfer.files);
+  if (e.dataTransfer && e.dataTransfer.files.length && soDono('adicionar livros')) importFiles(e.dataTransfer.files);
 });
 
 /* Busca / filtros / ordenação */
@@ -2175,7 +2192,7 @@ els.fontSeg.onclick = (e) => {
 
 /* Exportar / importar biblioteca */
 els.btnExport.onclick = exportLibrary;
-els.btnImport.onclick = () => els.fileBackup.click();
+els.btnImport.onclick = () => { if (soDono('importar uma cópia da biblioteca')) els.fileBackup.click(); };
 els.fileBackup.onchange = async () => {
   const f = els.fileBackup.files[0];
   if (f) await importBackup(f);
@@ -2312,6 +2329,11 @@ function atualizarAuthUi() {
   if (els.authUser) els.authUser.hidden = !logado;
   if (els.btnEntrar) els.btnEntrar.hidden = logado;
   if (els.btnSharedUpload) els.btnSharedUpload.hidden = !ehAdmin();
+  /* só o dono vê os botões de adicionar/importar livros */
+  const podeAdd = ehAdmin();
+  ['btnAdd', 'btnAddSide', 'btnAddLib', 'btnImport'].forEach(k => { if (els[k]) els[k].hidden = !podeAdd; });
+  const navAdd = document.querySelector('.nav-item[data-view="adicionar"]');
+  if (navAdd) navAdd.hidden = !podeAdd;
   if (logado) {
     els.userAva.textContent = (usuario.nome || '?').trim().charAt(0).toUpperCase();
     els.userName.textContent = usuario.nome;
