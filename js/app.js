@@ -47,7 +47,10 @@ const els = {
   mAuthor: $('#mAuthor'), mCover: $('#mCover'), mCoverFile: $('#mCoverFile'),
   mCoverGen: $('#mCoverGen'), mShelf: $('#mShelf'), mCols: $('#mCols'),
   mColNew: $('#mColNew'), mColAdd: $('#mColAdd'), mTags: $('#mTags'),
-  mTagNew: $('#mTagNew'), mTagAdd: $('#mTagAdd'), mStars: $('#mStars')
+  mTagNew: $('#mTagNew'), mTagAdd: $('#mTagAdd'), mStars: $('#mStars'),
+  sharedList: $('#sharedList'), sharedEmpty: $('#sharedEmpty'), sharedCount: $('#sharedCount'),
+  sharedFile: $('#sharedFile'), btnSharedRefresh: $('#btnSharedRefresh'),
+  btnSharedUpload: $('#btnSharedUpload'), btnSharedKey: $('#btnSharedKey')
 };
 
 let items = [];
@@ -1138,6 +1141,7 @@ function render() {
   else if (view === 'metas') renderMetas();
   else if (view === 'stats') renderStats();
   else if (view === 'favoritos') renderFavoritos();
+  else if (view === 'compartilhada') renderShared();
 }
 
 function renderAdicionar() {
@@ -2131,6 +2135,175 @@ els.fileBackup.onchange = async () => {
   if (f) await importBackup(f);
   els.fileBackup.value = '';
 };
+
+/* ================= Biblioteca compartilhada (Cloudflare) ================= */
+const SHARED_API = 'https://leitura-api.leitura-biblioteca.workers.dev';
+const CHAVE_STORE = 'leitura:chavecompartilhada';
+const SHARED_EMPTY_HTML = els.sharedEmpty ? els.sharedEmpty.innerHTML : '';
+let sharedCache = null;
+let sharedErro = '';
+let sharedPromise = null;
+
+const sharedKey = () => localStorage.getItem(CHAVE_STORE) || '';
+
+function pedirChave() {
+  const atual = sharedKey();
+  const v = prompt('Chave de acesso para enviar ou excluir livros:', atual);
+  if (v === null) return atual;
+  const nova = (v || '').trim();
+  if (nova) localStorage.setItem(CHAVE_STORE, nova);
+  else localStorage.removeItem(CHAVE_STORE);
+  return nova;
+}
+
+async function apiShared(path, opts) {
+  const res = await fetch(SHARED_API + path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.erro || ('Erro ' + res.status));
+  return data;
+}
+
+async function carregarShared(forcar) {
+  if (sharedPromise) {
+    await sharedPromise.catch(() => {});
+    if (!forcar && sharedCache) return;
+  }
+  sharedErro = '';
+  sharedPromise = (async () => {
+    try { sharedCache = await apiShared('/lista'); }
+    catch (e) { sharedCache = null; sharedErro = e.message; }
+  })();
+  try { await sharedPromise; } finally { sharedPromise = null; }
+}
+
+function fmtBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+  return (n / 1073741824).toFixed(2) + ' GB';
+}
+
+function extLabel(livro) {
+  const ext = (livro.nome.split('.').pop() || '').toUpperCase();
+  return ext && ext.length <= 5 ? ext : 'ARQUIVO';
+}
+
+function renderSharedBody() {
+  if (!els.sharedList) return;
+  const list = sharedCache || [];
+  els.sharedList.innerHTML = '';
+
+  if (sharedErro) {
+    els.sharedCount.textContent = 'Sem conexão com a biblioteca compartilhada';
+    els.sharedEmpty.hidden = false;
+    els.sharedEmpty.innerHTML = `<p>Não foi possível carregar os livros.</p><p class="muted">${escapeHtml(sharedErro)}</p><button class="btn btn-primary" id="sharedRetry">Tentar de novo</button>`;
+    const b = $('#sharedRetry');
+    if (b) b.onclick = () => carregarShared(true).then(renderSharedBody);
+    return;
+  }
+
+  els.sharedCount.textContent = !sharedCache
+    ? 'Carregando livros...'
+    : list.length === 1 ? '1 livro disponível para todos'
+    : `${list.length} livros disponíveis para todos`;
+
+  els.sharedEmpty.hidden = list.length > 0;
+  if (!list.length) els.sharedEmpty.innerHTML = SHARED_EMPTY_HTML;
+
+  list.forEach(livro => {
+    const row = document.createElement('div');
+    row.className = 'list-item shared';
+    row.innerHTML = `
+      <span class="lico"><svg viewBox="0 0 24 24"><path d="M5 4h4a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H5zM19 4h-4a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h4z"/></svg></span>
+      <span class="li-body">
+        <span class="li-title">${escapeHtml(livro.nome)}</span>
+        <span class="li-sub">${extLabel(livro)} · ${fmtBytes(livro.tamanho)} · ${new Date(livro.enviado).toLocaleDateString('pt-BR')}</span>
+      </span>
+      <span class="li-actions">
+        <button class="btn btn-sm btn-primary shared-dl">Baixar</button>
+        <button class="btn btn-sm shared-del" title="Excluir da biblioteca compartilhada">Excluir</button>
+      </span>`;
+    row.querySelector('.shared-dl').onclick = () => baixarShared(livro);
+    row.querySelector('.shared-del').onclick = () => excluirShared(livro);
+    els.sharedList.appendChild(row);
+  });
+}
+
+async function renderShared() {
+  await carregarShared(false);
+  renderSharedBody();
+}
+
+async function baixarShared(livro) {
+  toast(`Baixando "${livro.nome}"...`, 5000);
+  try {
+    const res = await fetch(`${SHARED_API}/livro/${livro.id}`);
+    if (!res.ok) throw new Error('Falha no download (' + res.status + ')');
+    const blob = await res.blob();
+    const file = new File([blob], livro.nome, { type: livro.tipo });
+    await importFiles([file]);
+  } catch (e) {
+    toast('Erro ao baixar: ' + e.message, 5000);
+  }
+}
+
+async function enviarShared(file) {
+  if (file.size > 90 * 1024 * 1024) { toast('Arquivo maior que 90 MB.', 4000); return; }
+  let chave = sharedKey();
+  if (!chave) {
+    chave = pedirChave();
+    if (!chave) { toast('Informe a chave de acesso para enviar.'); return; }
+  }
+  toast(`Enviando "${file.name}"...`, 6000);
+  try {
+    await apiShared('/enviar', {
+      method: 'POST',
+      headers: {
+        'X-Chave': chave,
+        'X-Nome': file.name,
+        'Content-Type': file.type || 'application/octet-stream'
+      },
+      body: file
+    });
+    toast('Livro enviado para a biblioteca compartilhada!', 4500);
+    sharedCache = null;
+    await carregarShared(true);
+    renderSharedBody();
+  } catch (e) {
+    if (/chave/i.test(e.message)) localStorage.removeItem(CHAVE_STORE);
+    toast('Erro ao enviar: ' + e.message, 5000);
+  }
+}
+
+async function excluirShared(livro) {
+  if (!confirm(`Excluir "${livro.nome}" da biblioteca compartilhada?`)) return;
+  let chave = sharedKey();
+  if (!chave) {
+    chave = pedirChave();
+    if (!chave) { toast('Informe a chave de acesso para excluir.'); return; }
+  }
+  try {
+    await apiShared(`/livro/${livro.id}`, { method: 'DELETE', headers: { 'X-Chave': chave } });
+    toast('Livro excluído.');
+    sharedCache = null;
+    await carregarShared(true);
+    renderSharedBody();
+  } catch (e) {
+    if (/chave/i.test(e.message)) localStorage.removeItem(CHAVE_STORE);
+    toast('Erro ao excluir: ' + e.message, 5000);
+  }
+}
+
+if (els.btnSharedRefresh) {
+  els.btnSharedRefresh.onclick = () => { sharedCache = null; renderShared(); };
+  els.btnSharedUpload.onclick = () => els.sharedFile.click();
+  els.btnSharedKey.onclick = () => { if (pedirChave()) toast('Chave salva.'); };
+  els.sharedFile.onchange = () => {
+    const f = els.sharedFile.files[0];
+    els.sharedFile.value = '';
+    if (f) enviarShared(f);
+  };
+}
 
 /* ================= Início ================= */
 (async function init() {

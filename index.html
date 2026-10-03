@@ -56,6 +56,10 @@
       <svg viewBox="0 0 24 24"><path d="M12 19.5s-6.4-3.9-6.4-8.3A3.6 3.6 0 0 1 12 8.9a3.6 3.6 0 0 1 6.4 2.3c0 4.4-6.4 8.3-6.4 8.3z"/></svg>
       <span>Favoritos</span>
     </button>
+    <button class="nav-item" data-view="compartilhada">
+      <svg viewBox="0 0 24 24"><circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="m8.3 10.8 7.4-4.1M8.3 13.2l7.4 4.1"/></svg>
+      <span>Compartilhada</span>
+    </button>
   </nav>
 
   <div class="sidebar-foot">
@@ -325,6 +329,34 @@
         <p>Nenhum favorito ainda.</p>
         <p class="muted">Toque no coração de um livro para guardá-lo aqui.</p>
       </div>
+    </section>
+
+    <!-- ---------- COMPARTILHADA ---------- -->
+    <section class="view" data-view="compartilhada">
+      <header class="page-head">
+        <div>
+          <h1>Biblioteca Compartilhada</h1>
+          <p class="muted" id="sharedCount">Carregando livros...</p>
+        </div>
+        <div class="page-head-actions">
+          <button class="btn" id="btnSharedKey" title="Chave de acesso para enviar ou excluir livros">
+            <svg viewBox="0 0 24 24" class="i"><circle cx="7.5" cy="15.5" r="4"/><path d="m10.5 12.5 8-8M15.5 7.5l2 2M17.5 5.5l2 2"/></svg>
+            <span>Chave</span>
+          </button>
+          <button class="btn" id="btnSharedRefresh" title="Atualizar lista">
+            <svg viewBox="0 0 24 24" class="i"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4.5h-4.5"/></svg>
+            <span>Atualizar</span>
+          </button>
+          <button class="btn btn-primary" id="btnSharedUpload">Enviar livro</button>
+        </div>
+      </header>
+
+      <div id="sharedList"></div>
+      <div class="empty" id="sharedEmpty" hidden>
+        <p>Nenhum livro compartilhado ainda.</p>
+        <p class="muted">Clique em “Enviar livro” para que todos possam baixá-lo aqui.</p>
+      </div>
+      <input type="file" id="sharedFile" hidden>
     </section>
   </main>
 </div>

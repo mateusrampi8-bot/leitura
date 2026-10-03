@@ -1155,6 +1155,21 @@ mark.hl[data-c="b"] { background: #b7d1f2; }
 .import-bar { position: fixed; left: 0; right: 0; top: 0; height: 3px; z-index: 95; background: transparent; }
 .import-bar i { display: block; height: 100%; background: var(--sage); width: 0; transition: .2s; }
 
+/* ---------------- Biblioteca compartilhada ---------------- */
+#sharedList .list-item.shared {
+  padding: 13px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-sm);
+}
+#sharedList .li-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+@media (max-width: 860px) {
+  #sharedList .list-item.shared { flex-wrap: wrap; }
+  #sharedList .li-body { flex: 1 1 calc(100% - 50px); }
+  #sharedList .li-actions { width: 100%; justify-content: flex-end; }
+}
+
 /* ---------------- Responsivo ---------------- */
 @media (max-width: 1180px) {
   .home-grid { grid-template-columns: minmax(0, 1fr); }

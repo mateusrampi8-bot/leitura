@@ -1,0 +1,7 @@
+name = "leitura-api"
+main = "src/index.js"
+compatibility_date = "2026-10-03"
+
+[[r2_buckets]]
+binding = "LEITURA"
+bucket_name = "leitura-biblioteca"
