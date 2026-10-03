@@ -2184,6 +2184,7 @@ els.fileBackup.onchange = async () => {
 
 /* ================= Biblioteca compartilhada (Cloudflare) ================= */
 const TOKEN_STORE = 'leitura:token';
+const USUARIO_STORE = 'leitura:usuario';
 const SHARED_EMPTY_HTML = els.sharedEmpty ? els.sharedEmpty.innerHTML : '';
 let sharedCache = null;
 let sharedErro = '';
@@ -2192,6 +2193,7 @@ let token = localStorage.getItem(TOKEN_STORE) || '';
 let usuario = null;
 let authModo = 'entrar';
 let configAuth = null;
+let authTravado = false;             /* app bloqueado atrás do login */
 let socLivro = null;
 
 const ehAdmin = () => !!usuario && usuario.role === 'admin';
@@ -2201,7 +2203,16 @@ async function apiShared(path, opts = {}) {
   if (token) headers['X-Sessao'] = token;
   const res = await fetch(SHARED_API + path, { ...opts, headers });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.erro || ('Erro ' + res.status));
+  if (!res.ok) {
+    const err = new Error(data.erro || ('Erro ' + res.status));
+    err.status = res.status;
+    /* sessão expirou no meio do uso: volta para o login travado */
+    if (res.status === 401 && usuario && !authTravado) {
+      toast('Sua sessão expirou — entre novamente.', 4500);
+      travarAuth('entrar');
+    }
+    throw err;
+  }
   return data;
 }
 
@@ -2231,16 +2242,42 @@ function abrirAuth(modo) {
   initGoogle();
 }
 
-function fecharAuth() { els.authModal.hidden = true; }
+/* Modo travado: só é possível entrar ou criar conta (sem fechar o modal) */
+function travarAuth(modo) {
+  authTravado = true;
+  els.authClose.hidden = true;
+  els.authCancel.hidden = true;
+  abrirAuth(modo || 'entrar');
+}
+
+function destravarAuth() {
+  authTravado = false;
+  els.authClose.hidden = false;
+  els.authCancel.hidden = false;
+}
+
+function fecharAuth() {
+  if (authTravado) return;
+  els.authModal.hidden = true;
+}
 
 function salvarSessao(res) {
   token = res.token;
   usuario = res.usuario;
   localStorage.setItem(TOKEN_STORE, token);
+  try { localStorage.setItem(USUARIO_STORE, JSON.stringify(res.usuario)); } catch (e) {}
   sharedCache = null;
+  destravarAuth();
   fecharAuth();
   atualizarAuthUi();
   toast(`Bem-vindo(a), ${usuario.nome}!`);
+}
+
+function limparSessao() {
+  token = '';
+  usuario = null;
+  localStorage.removeItem(TOKEN_STORE);
+  localStorage.removeItem(USUARIO_STORE);
 }
 
 async function restaurarSessao() {
@@ -2248,22 +2285,26 @@ async function restaurarSessao() {
   try {
     const r = await apiShared('/auth/eu');
     usuario = r.usuario;
+    try { localStorage.setItem(USUARIO_STORE, JSON.stringify(usuario)); } catch (e) {}
   } catch (e) {
-    token = '';
-    usuario = null;
-    localStorage.removeItem(TOKEN_STORE);
+    if (e.status === 401) {
+      limparSessao();
+    } else {
+      /* sem internet: mantém a sessão guardada para seguir lendo offline */
+      try { usuario = JSON.parse(localStorage.getItem(USUARIO_STORE) || 'null'); } catch (_) { usuario = null; }
+      if (!usuario) limparSessao();
+    }
   }
   atualizarAuthUi();
 }
 
 function sair() {
-  token = '';
-  usuario = null;
-  localStorage.removeItem(TOKEN_STORE);
+  limparSessao();
   sharedCache = null;
   atualizarAuthUi();
   toast('Você saiu da conta.');
   render();
+  travarAuth('entrar');            /* sem conta, não usa o app */
 }
 
 function atualizarAuthUi() {
@@ -2284,7 +2325,7 @@ function atualizarAuthUi() {
 function exigirLogin(para) {
   if (usuario) return true;
   toast(`Entre ou crie uma conta para ${para}.`, 3500);
-  abrirAuth('entrar');
+  travarAuth('entrar');
   return false;
 }
 
@@ -2547,7 +2588,9 @@ function fecharNotas() {
 async function baixarShared(livro) {
   toast(`Baixando "${livro.nome}"...`, 5000);
   try {
-    const res = await fetch(`${SHARED_API}/livro/${livro.id}`);
+    const res = await fetch(`${SHARED_API}/livro/${livro.id}`, {
+      headers: token ? { 'X-Sessao': token } : {}
+    });
     if (!res.ok) throw new Error('Falha no download (' + res.status + ')');
     const blob = await res.blob();
     const file = new File([blob], livro.nome, { type: livro.tipo });
@@ -2664,10 +2707,7 @@ document.addEventListener('keydown', (e) => {
   }
   setView('home');
 
-  /* Vindo da página de apresentação: abre direto no cadastro/entrada */
+  /* Sem conta não pode usar: trava no login (ou cadastro, se veio da apresentação) */
   const params = new URLSearchParams(location.search);
-  if (!usuario) {
-    if (params.get('cadastro')) abrirAuth('cadastrar');
-    else if (params.get('entrar')) abrirAuth('entrar');
-  }
+  if (!usuario) travarAuth(params.get('cadastro') ? 'cadastrar' : 'entrar');
 })();

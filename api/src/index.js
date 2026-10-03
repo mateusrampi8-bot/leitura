@@ -254,6 +254,7 @@ export default {
       /* ----- Livros ----- */
       if (request.method === 'GET' && p === '/lista') {
         const u = await sessaoDe(request, env);
+        if (!u) return erro('Entre na sua conta.', 401);
         return json(await listar(env, u));
       }
 
@@ -273,6 +274,8 @@ export default {
       }
 
       if (request.method === 'GET' && p.startsWith('/livro/')) {
+        const sess = await sessaoDe(request, env);
+        if (!sess) return erro('Entre na sua conta.', 401);
         const id = p.slice('/livro/'.length).split('/')[0];
         const obj = await env.LEITURA.get('livros/' + id);
         if (!obj) return erro('Livro não encontrado', 404);
