@@ -3,6 +3,7 @@ const CACHE = 'leitura-v1';
 const SHELL = [
   './',
   './index.html',
+  './app.html',
   './css/styles.css',
   './js/db.js',
   './js/text.js',

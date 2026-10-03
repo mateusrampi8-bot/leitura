@@ -2663,4 +2663,11 @@ document.addEventListener('keydown', (e) => {
     toast('Armazenamento local indisponível. Use o iniciar.bat para abrir o app.', 6000);
   }
   setView('home');
+
+  /* Vindo da página de apresentação: abre direto no cadastro/entrada */
+  const params = new URLSearchParams(location.search);
+  if (!usuario) {
+    if (params.get('cadastro')) abrirAuth('cadastrar');
+    else if (params.get('entrar')) abrirAuth('entrar');
+  }
 })();
