@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leitura — sua biblioteca</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%237d9a7a'/%3E%3Cpath d='M28 32h18a6 6 0 016 6v32a6 6 0 00-6-6H28zM72 32H54a6 6 0 00-6 6v32a6 6 0 016-6h18z' fill='none' stroke='white' stroke-width='5' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#7d9a7a">
+<meta name="description" content="Biblioteca e leitor local: PDF, EPUB, mangás, artigos e audiolivros, tudo offline no seu dispositivo.">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- ================= SIDEBAR ================= -->
+<aside class="sidebar">
+  <div class="brand">
+    <span class="brand-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 6.5C10.5 5 8.5 4.5 5 4.5v13c3.5 0 5.5.5 7 2 1.5-1.5 3.5-2 7-2v-13c-3.5 0-5.5.5-7 2z"/><path d="M12 6.5v13"/>
+      </svg>
+    </span>
+    <span class="brand-text">
+      <strong>Leitura</strong>
+      <small>sua biblioteca local</small>
+    </span>
+  </div>
+
+  <nav class="nav" id="nav">
+    <button class="nav-item active" data-view="home">
+      <svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4v-5h-6v5H5a1 1 0 0 1-1-1z"/></svg>
+      <span>Início</span>
+    </button>
+    <button class="nav-item" data-view="biblioteca">
+      <svg viewBox="0 0 24 24"><path d="M5 4h4a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H5zM19 4h-4a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h4z"/></svg>
+      <span>Minha Biblioteca</span>
+    </button>
+    <button class="nav-item" data-view="adicionar">
+      <svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg>
+      <span>Adicionar</span>
+    </button>
+    <button class="nav-item" data-view="lendo">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M10.2 9.3v5.4l4.4-2.7z"/></svg>
+      <span>Lendo Agora</span>
+    </button>
+    <button class="nav-item" data-view="metas">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>
+      <span>Metas</span>
+    </button>
+    <button class="nav-item" data-view="stats">
+      <svg viewBox="0 0 24 24"><path d="M5 19V11M12 19V6M19 19v-5"/></svg>
+      <span>Estatísticas</span>
+    </button>
+    <button class="nav-item" data-view="favoritos">
+      <svg viewBox="0 0 24 24"><path d="M12 19.5s-6.4-3.9-6.4-8.3A3.6 3.6 0 0 1 12 8.9a3.6 3.6 0 0 1 6.4 2.3c0 4.4-6.4 8.3-6.4 8.3z"/></svg>
+      <span>Favoritos</span>
+    </button>
+  </nav>
+
+  <div class="sidebar-foot">
+    <button class="btn btn-primary btn-block" id="btnAddSide">
+      <svg viewBox="0 0 24 24" class="i"><path d="M12 6v12M6 12h12"/></svg>
+      Adicionar livros
+    </button>
+    <p class="sidebar-hint">Arquivos guardados apenas no seu dispositivo.</p>
+  </div>
+</aside>
+
+<!-- ================= CONTEÚDO ================= -->
+<div class="content">
+  <header class="topbar">
+    <div class="search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+      <input type="search" id="search" placeholder="Buscar por título, tipo..." autocomplete="off">
+    </div>
+    <div class="topbar-actions">
+      <button class="btn" id="btnAdd">
+        <svg viewBox="0 0 24 24" class="i"><path d="M12 6v12M6 12h12"/></svg>
+        <span>Adicionar</span>
+      </button>
+      <button class="btn btn-circle" id="btnModeTop" title="Modo de leitura">
+        <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8.2 8.2 0 1 0 10.5 10.5z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="views" id="views">
+
+    <!-- ---------- INÍCIO ---------- -->
+    <section class="view" data-view="home">
+      <div class="home-grid">
+        <div class="home-main">
+          <header class="greeting">
+            <h1 id="greeting">Olá</h1>
+            <p id="greetingSub">Que tal continuar de onde parou?</p>
+          </header>
+
+          <div id="hero"></div>
+
+          <div class="section-head">
+            <h2>Lendo agora</h2>
+            <button class="link" data-view="lendo">Ver todos</button>
+          </div>
+          <div class="row-cards" id="lendoRow"></div>
+
+          <div class="section-head">
+            <h2>Minha biblioteca</h2>
+            <button class="link" data-view="biblioteca">Ver todos</button>
+          </div>
+          <div class="stat-grid" id="statGrid"></div>
+        </div>
+
+        <aside class="home-side">
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Sua meta</h3>
+              <button class="link" data-view="metas">Ver detalhes</button>
+            </div>
+            <div class="goal" id="goalBox"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Atividade de leitura</h3>
+              <span class="chip-static" id="actRange">7 dias</span>
+            </div>
+            <div class="chart" id="actChart"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Recomendações</h3>
+              <button class="link" data-view="biblioteca">Ver mais</button>
+            </div>
+            <div class="reco-list" id="recoList"></div>
+          </section>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ---------- ADICIONAR ---------- -->
+    <section class="view" data-view="adicionar">
+      <header class="page-head">
+        <div>
+          <h1>Adicionar títulos</h1>
+          <p class="muted">Novos arquivos vão direto para a sua biblioteca local</p>
+        </div>
+        <div class="page-head-actions">
+          <button class="btn btn-primary" id="btnPick">Escolher arquivos</button>
+        </div>
+      </header>
+
+      <div class="add-grid">
+        <div class="dropzone dropzone-lg" id="dropzone">
+          <div class="dropzone-inner">
+            <span class="dropzone-icon">
+              <svg viewBox="0 0 24 24"><path d="M12 5v10M8.5 11.5 12 15l3.5-3.5"/><path d="M5 18h14"/></svg>
+            </span>
+            <p><strong>Arraste seus arquivos aqui</strong></p>
+            <p class="muted">Solte quantos quiser — eles entram juntos na biblioteca</p>
+            <button class="btn btn-primary" id="btnPickInner">Selecionar arquivos</button>
+            <p class="muted dropzone-or">ou arraste e solte em qualquer lugar da tela</p>
+          </div>
+        </div>
+
+        <div class="add-side">
+          <section class="panel">
+            <div class="panel-head"><h3>Formatos aceitos</h3></div>
+            <ul class="format-list">
+              <li><span class="fmt">PDF</span> Livros e documentos</li>
+              <li><span class="fmt">EPUB</span> E-books com capítulos</li>
+              <li><span class="fmt">IMG</span> Mangás e HQs (png, jpg, webp)</li>
+              <li><span class="fmt">ZIP</span> Pacotes de páginas ou áudios</li>
+              <li><span class="fmt">TXT</span> Artigos e textos (txt, md, html)</li>
+              <li><span class="fmt">ÁUDIO</span> Audiolivros (mp3, m4a, ogg)</li>
+            </ul>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head"><h3>Como funciona</h3></div>
+            <ul class="tips-list">
+              <li>Os arquivos ficam só no seu dispositivo — nada é enviado para a internet.</li>
+              <li>Para álbuns de imagens ou áudios, mande todos os arquivos de uma vez.</li>
+              <li>Use <strong>Exportar</strong> na Biblioteca para guardar uma cópia de tudo em um arquivo.</li>
+            </ul>
+            <p class="muted" id="addCount">0 títulos na biblioteca</p>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- BIBLIOTECA ---------- -->
+    <section class="view" data-view="biblioteca">
+      <header class="page-head">
+        <div>
+          <h1>Minha Biblioteca</h1>
+          <p class="muted" id="libCount">0 itens</p>
+        </div>
+        <div class="page-head-actions">
+          <select id="sort" class="select">
+            <option value="recent">Mais recentes</option>
+            <option value="name">Nome (A-Z)</option>
+            <option value="progress">Continuar lendo</option>
+            <option value="rating">Nota (maior)</option>
+          </select>
+          <button class="btn" id="btnExport" title="Salvar cópia da biblioteca em um arquivo">
+            <svg viewBox="0 0 24 24" class="i"><path d="M12 15V5M8.5 8.5 12 5l3.5 3.5"/><path d="M5 15v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3"/></svg>
+            <span>Exportar</span>
+          </button>
+          <button class="btn" id="btnImport" title="Restaurar biblioteca de um arquivo exportado">
+            <svg viewBox="0 0 24 24" class="i"><path d="M12 5v10M8.5 11.5 12 15l3.5-3.5"/><path d="M5 19h14"/></svg>
+            <span>Importar</span>
+          </button>
+          <button class="btn btn-primary" id="btnAddLib" data-view="adicionar">+ Adicionar</button>
+        </div>
+      </header>
+
+      <nav class="chips" id="filters">
+        <button class="chip active" data-filter="all">Todos</button>
+        <button class="chip" data-filter="pdf">Livros PDF</button>
+        <button class="chip" data-filter="comic">Mangás &amp; HQs</button>
+        <button class="chip" data-filter="epub">EPUB</button>
+        <button class="chip" data-filter="audio">Audiobooks</button>
+        <button class="chip" data-filter="text">Artigos</button>
+      </nav>
+
+      <div class="shelf-row">
+        <nav class="chips chips-shelf" id="shelfChips"></nav>
+        <select id="tagSel" class="select select-sm" hidden></select>
+      </div>
+
+      <div class="grid" id="grid"></div>
+      <div class="empty" id="empty">
+        <p>Sua biblioteca está vazia.</p>
+        <p class="muted">Arraste arquivos para a área acima ou clique em “Adicionar”.</p>
+      </div>
+    </section>
+
+    <!-- ---------- LENDO AGORA ---------- -->
+    <section class="view" data-view="lendo">
+      <header class="page-head">
+        <div>
+          <h1>Lendo Agora</h1>
+          <p class="muted">Livros e capítulos em andamento</p>
+        </div>
+      </header>
+      <div class="grid" id="lendoGrid"></div>
+      <div class="empty" id="lendoEmpty">
+        <p>Nada em andamento ainda.</p>
+        <p class="muted">Abra um livro da biblioteca para começar.</p>
+        <button class="btn btn-primary" data-view="biblioteca">Ir para a biblioteca</button>
+      </div>
+    </section>
+
+    <!-- ---------- METAS ---------- -->
+    <section class="view" data-view="metas">
+      <header class="page-head">
+        <div>
+          <h1>Metas</h1>
+          <p class="muted">Acompanhe o quanto você já leu este ano</p>
+        </div>
+      </header>
+
+      <div class="metas-grid">
+        <section class="panel panel-lg">
+          <h3>Meta de leitura <span id="metaYear"></span></h3>
+          <div class="goal goal-lg" id="goalBig"></div>
+          <div class="goal-form">
+            <label for="metaInput">Livros por ano</label>
+            <div class="goal-form-row">
+              <input type="number" id="metaInput" min="1" max="500" step="1">
+              <button class="btn btn-primary" id="metaSave">Salvar meta</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel panel-lg">
+          <div class="panel-head">
+            <h3>Concluídos</h3>
+            <span class="chip-static" id="doneCount">0</span>
+          </div>
+          <div class="list" id="doneList"></div>
+        </section>
+      </div>
+    </section>
+
+    <!-- ---------- ESTATÍSTICAS ---------- -->
+    <section class="view" data-view="stats">
+      <header class="page-head">
+        <div>
+          <h1>Estatísticas</h1>
+          <p class="muted">Um panorama dos seus hábitos de leitura</p>
+        </div>
+      </header>
+
+      <div class="kpi-grid" id="kpiGrid"></div>
+
+      <div class="stats-grid">
+        <section class="panel panel-lg">
+          <div class="panel-head">
+            <h3>Tempo de leitura nos últimos 7 dias</h3>
+            <span class="chip-static" id="weekTotal">0h</span>
+          </div>
+          <div class="chart chart-tall" id="weekChart"></div>
+        </section>
+
+        <section class="panel panel-lg">
+          <div class="panel-head"><h3>Resumo</h3></div>
+          <div class="list" id="summaryList"></div>
+        </section>
+      </div>
+    </section>
+
+    <!-- ---------- FAVORITOS ---------- -->
+    <section class="view" data-view="favoritos">
+      <header class="page-head">
+        <div>
+          <h1>Favoritos</h1>
+          <p class="muted">Os títulos que você marcou com coração</p>
+        </div>
+      </header>
+      <div class="grid" id="favGrid"></div>
+      <div class="empty" id="favEmpty">
+        <p>Nenhum favorito ainda.</p>
+        <p class="muted">Toque no coração de um livro para guardá-lo aqui.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ================= LEITOR ================= -->
+<div id="readerView" data-mode="light" hidden>
+  <div class="reader-progress"><span id="readerProgressFill"></span></div>
+  <div class="reader-bar">
+    <button class="btn btn-icon" id="btnBack" title="Voltar à biblioteca">
+      <svg viewBox="0 0 24 24"><path d="M14.5 6 9 12l5.5 6"/></svg>
+    </button>
+    <div class="reader-title" id="readerTitle">—</div>
+    <div class="reader-controls" id="readerControls"></div>
+    <div class="reader-tools">
+      <button class="btn btn-icon" id="btnFind" title="Buscar no livro (Ctrl+F)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+      </button>
+      <button class="btn btn-icon" id="btnSpeak" title="Ler em voz alta" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3l4.5-3.5v12L7 14.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M17.8 6.6a7.5 7.5 0 0 1 0 10.8"/></svg>
+      </button>
+      <button class="btn btn-icon" id="btnType" title="Ajustar texto (fonte e coluna)" hidden>
+        <span class="aa">Aa</span>
+      </button>
+      <button class="btn btn-icon" id="btnNotes" title="Anotar esta página (N)">
+        <svg viewBox="0 0 24 24"><path d="M15.5 5.5 18.5 8.5 9 18H6v-3z"/><path d="M5 19h14"/></svg>
+      </button>
+      <button class="btn btn-icon" id="btnMode" title="Modo de leitura (claro, sépia, noite)">
+        <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8.2 8.2 0 1 0 10.5 10.5z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Busca no livro -->
+  <div class="find-bar" id="findBar" hidden>
+    <svg class="find-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+    <input type="search" id="findInput" placeholder="Buscar no livro..." autocomplete="off" spellcheck="false">
+    <span class="find-count" id="findCount">0/0</span>
+    <button class="btn btn-icon" id="findPrev" title="Anterior (Enter)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 14.5 12 8.5l6 6"/></svg>
+    </button>
+    <button class="btn btn-icon" id="findNext" title="Próximo (Shift+Enter)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 9.5 12 15.5l6-6"/></svg>
+    </button>
+    <button class="btn btn-icon" id="findClose" title="Fechar (Esc)">
+      <svg viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg>
+    </button>
+  </div>
+
+  <!-- Painel de anotações -->
+  <aside class="notes-panel" id="notesPanel" hidden>
+    <div class="notes-head">
+      <div>
+        <h4>Anotações</h4>
+        <p class="muted" id="notesPos">—</p>
+      </div>
+      <div class="notes-head-actions">
+        <button class="btn btn-sm" id="btnExportNotes" title="Exportar anotações e destaques em Markdown">.md</button>
+        <button class="btn btn-icon" id="btnNotesClose" title="Fechar">
+          <svg viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg>
+        </button>
+      </div>
+    </div>
+    <textarea id="notesText" placeholder="Escreva sua anotação para esta página..." spellcheck="false"></textarea>
+    <div class="notes-list-head" id="hlHead" hidden>Destaques</div>
+    <div class="notes-list" id="hlList" hidden></div>
+    <div class="notes-list-head">Todas as anotações</div>
+    <div class="notes-list" id="notesList"></div>
+  </aside>
+
+  <!-- Ajustes de texto -->
+  <div class="hl-pop" id="hlPop" hidden>
+    <button class="hl-c" data-c="y" style="--c:#f6e3a4" title="Destaque amarelo"></button>
+    <button class="hl-c" data-c="g" style="--c:#b9dfb4" title="Destaque verde"></button>
+    <button class="hl-c" data-c="p" style="--c:#f4bcc7" title="Destaque rosa"></button>
+    <button class="hl-c" data-c="b" style="--c:#b7d1f2" title="Destaque azul"></button>
+    <button class="hl-rm" id="hlRemove" title="Remover destaque" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+    </button>
+  </div>
+
+  <div class="type-pop" id="typePanel" hidden>
+    <div class="type-row">
+      <span class="type-label">Tamanho da fonte</span>
+      <div class="type-ctrl">
+        <button class="btn btn-icon btn-sm" id="fontMinus" title="Diminuir">A&#8722;</button>
+        <span class="type-val" id="fontVal">19</span>
+        <button class="btn btn-icon btn-sm" id="fontPlus" title="Aumentar">A+</button>
+      </div>
+    </div>
+    <div class="type-row">
+      <span class="type-label">Largura da coluna</span>
+      <div class="seg" id="widthSeg">
+        <button data-w="estreito">Estreito</button>
+        <button data-w="normal">Normal</button>
+        <button data-w="largo">Largo</button>
+      </div>
+    </div>
+  <div class="type-row">
+    <span class="type-label">Tipografia</span>
+    <div class="seg" id="fontSeg">
+      <button data-f="serif">Serifada</button>
+      <button data-f="sans">Sem serifa</button>
+    </div>
+  </div>
+  <div class="type-row type-row-voz">
+    <span class="type-label">Voz</span>
+    <div class="type-ctrl">
+      <select id="voiceSel" class="select-sm" title="Voz usada na leitura em voz alta"></select>
+    </div>
+  </div>
+  <div class="type-slider">
+    <div class="slider-head">
+      <span>Velocidade</span>
+      <span class="slider-val" id="velVal">1x</span>
+    </div>
+    <input type="range" id="velRange" min="0.5" max="2" step="0.05" value="1"
+      title="Rápido ou devagar">
+  </div>
+  <div class="type-slider">
+    <div class="slider-head">
+      <span>Tom</span>
+      <span class="slider-val" id="pitchVal">normal</span>
+    </div>
+    <input type="range" id="pitchRange" min="0.5" max="1.5" step="0.05" value="1"
+      title="Mais grave ou mais agudo">
+  </div>
+  <div class="type-slider">
+    <div class="slider-head">
+      <span>Volume</span>
+      <span class="slider-val" id="volVal">100%</span>
+    </div>
+    <input type="range" id="volRange" min="0.1" max="1" step="0.05" value="1"
+      title="Mais suave ou mais alto">
+  </div>
+  <div class="type-row">
+    <span class="type-label">Modo soneca</span>
+    <label class="switch" title="Voz suave, grave e abafada para dormir">
+      <input type="checkbox" id="noiteVoice">
+      <span class="switch-ui"></span>
+    </label>
+  </div>
+</div>
+  <div class="reader-body" id="readerBody"></div>
+  <div class="reader-footer" id="readerFooter"></div>
+</div>
+
+<div class="modal-backdrop" id="itemModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitleLbl">
+    <header class="modal-head">
+      <h2 id="mTitleLbl">Editar título</h2>
+      <button class="btn btn-icon" id="mClose" title="Fechar">&#10005;</button>
+    </header>
+
+    <div class="modal-body">
+      <div class="cover-edit">
+        <img id="mCover" alt="" class="cover-edit-img">
+        <div class="cover-edit-actions">
+          <label class="btn btn-sm" for="mCoverFile">Trocar capa</label>
+          <input type="file" id="mCoverFile" accept="image/*" hidden>
+          <button class="btn btn-sm" id="mCoverGen">Gerar capa</button>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>Título</span>
+        <input type="text" id="mTitle" autocomplete="off">
+      </label>
+
+      <label class="field">
+        <span>Autor</span>
+        <input type="text" id="mAuthor" placeholder="Desconhecido" autocomplete="off">
+      </label>
+
+      <div class="field">
+        <span>Estante</span>
+        <div class="seg" id="mShelf">
+          <button data-shelf="para-ler">Para ler</button>
+          <button data-shelf="lendo">Lendo</button>
+          <button data-shelf="lidos">Lidos</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span>Coleções</span>
+        <div class="chip-row" id="mCols"></div>
+        <div class="field-row">
+          <input type="text" id="mColNew" placeholder="Nova coleção" autocomplete="off">
+          <button class="btn btn-sm" id="mColAdd">Criar</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span>Tags</span>
+        <div class="chip-row" id="mTags"></div>
+        <div class="field-row">
+          <input type="text" id="mTagNew" placeholder="nova-tag" autocomplete="off">
+          <button class="btn btn-sm" id="mTagAdd">Adicionar</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span>Nota</span>
+        <div class="stars" id="mStars"></div>
+      </div>
+    </div>
+
+    <footer class="modal-foot">
+      <button class="btn btn-danger" id="mDelete">Remover</button>
+      <div class="modal-foot-right">
+        <button class="btn" id="mCancel">Cancelar</button>
+        <button class="btn btn-primary" id="mSave">Salvar</button>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<div class="drop-overlay" id="dropOverlay">
+  <div class="drop-overlay-inner">
+    <svg viewBox="0 0 24 24"><path d="M12 5v10M8.5 11.5 12 15l3.5-3.5"/><path d="M5 18h14"/></svg>
+    <p>Solte para adicionar à sua biblioteca</p>
+  </div>
+</div>
+
+<input type="file" id="fileInput" multiple hidden>
+<input type="file" id="fileBackup" accept=".zip,application/zip" hidden>
+<div class="toast" id="toast" hidden></div>
+
+<script src="lib/pdf.min.js"></script>
+<script src="lib/jszip.min.js"></script>
+<script src="js/db.js"></script>
+<script src="js/text.js"></script>
+<script src="js/readers.js"></script>
+<script src="js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
