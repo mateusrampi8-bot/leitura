@@ -38,6 +38,36 @@ function detectType(name) {
   return null;
 }
 
+/* Arquivo sem extensão (ou extensão errada): descobre o tipo pelos primeiros bytes. */
+async function sniffType(file) {
+  try {
+    const head = new Uint8Array(await file.slice(0, 1024).arrayBuffer());
+    const ascii = String.fromCharCode.apply(null, head);
+    if (head[0] === 0x50 && head[1] === 0x4B) {
+      return (ascii.includes('application/epub+zip') || ascii.includes('META-INF/container.xml')) ? 'epub' : 'zip';
+    }
+    if (head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46) return 'pdf';
+    if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4E && head[3] === 0x47) return 'comic';
+    if (head[0] === 0xFF && head[1] === 0xD8 && head[2] === 0xFF) return 'comic';
+    if (head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46) return 'comic';
+    if (head[0] === 0x42 && head[1] === 0x4D) return 'comic';
+    if (ascii.indexOf('WEBP') === 8) return 'comic';
+    if (ascii.indexOf('RIFF') === 0) return 'audio';
+    if (ascii.indexOf('ID3') === 0) return 'audio';
+    if (ascii.indexOf('fLaC') === 0) return 'audio';
+    if (ascii.indexOf('OggS') === 0) return 'audio';
+    if (ascii.indexOf('ftyp') === 4) return 'audio';
+    if (head[0] === 0xFF && (head[1] === 0xFB || head[1] === 0xF3 || head[1] === 0xF2)) return 'audio';
+    const bytes = head.slice(0, 512);
+    let bad = 0;
+    for (const x of bytes) if (x === 0 || x < 9 || (x > 13 && x < 32)) bad++;
+    if (bytes.length && bad / bytes.length < 0.1) return 'text';
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function baseName(name) {
   const i = name.lastIndexOf('.');
   return i < 0 ? name : name.slice(0, i);

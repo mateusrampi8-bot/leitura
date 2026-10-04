@@ -1163,10 +1163,15 @@ async function exportLibrary() {
 }
 
 async function importBackup(file) {
+  let zip = null;
+  try { zip = await JSZip.loadAsync(file); } catch (e) { zip = null; }
+  const mf = zip ? zip.file('manifest.json') : null;
+  if (!mf) {
+    /* não é um backup do Leitura: adiciona como livro normal */
+    await importFiles([file]);
+    return;
+  }
   try {
-    const zip = await JSZip.loadAsync(file);
-    const mf = zip.file('manifest.json');
-    if (!mf) { toast('Arquivo inválido: não é um backup do Leitura.'); return; }
     const data = JSON.parse(await mf.async('text'));
     if (!data || !Array.isArray(data.items)) { toast('Arquivo de backup inválido.'); return; }
 
@@ -1807,7 +1812,8 @@ async function importFiles(fileList) {
   const bar = makeProgressBar();
   const groups = { pdf: [], epub: [], comic: [], audio: [], text: [], zip: [], unsupported: [] };
   for (const f of files) {
-    const t = extOf(f.name) === 'zip' ? 'zip' : detectType(f.name);
+    let t = extOf(f.name) === 'zip' ? 'zip' : detectType(f.name);
+    if (!t) t = await sniffType(f);
     (t ? groups[t] : groups.unsupported).push(f);
   }
 
