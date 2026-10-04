@@ -1212,6 +1212,7 @@ function setView(name) {
 
 function render() {
   if (view === 'home') renderHome();
+  else if (view === 'todos') renderTodos();
   else if (view === 'biblioteca') renderLibrary();
   else if (view === 'adicionar') renderAdicionar();
   else if (view === 'lendo') renderLendo();
@@ -1377,6 +1378,22 @@ function renderHome() {
 }
 
 /* Livros do dono direto na tela Início, para não ficarem escondidos */
+function makeSharedRow(livro) {
+  const row = document.createElement('div');
+  row.className = 'list-item shared';
+  row.innerHTML = `
+    <span class="lico"><svg viewBox="0 0 24 24"><path d="M5 4h4a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H5zM19 4h-4a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h4z"/></svg></span>
+    <span class="li-body">
+      <span class="li-title">${escapeHtml(livro.nome)}</span>
+      <span class="li-sub">${extLabel(livro)} · ${fmtBytes(livro.tamanho)}</span>
+    </span>
+    <span class="li-actions">
+      <button class="btn btn-sm btn-primary shared-dl">Ler</button>
+    </span>`;
+  row.querySelector('.shared-dl').onclick = () => baixarShared(livro);
+  return row;
+}
+
 function renderSharedHome() {
   const head = $('#sharedHomeHead'), box = $('#sharedHome');
   if (!head || !box) return;
@@ -1391,25 +1408,43 @@ function renderSharedHome() {
       return;
     }
     box.innerHTML = '';
-    list.slice(0, 6).forEach(livro => {
-      const row = document.createElement('div');
-      row.className = 'list-item shared';
-      row.innerHTML = `
-        <span class="lico"><svg viewBox="0 0 24 24"><path d="M5 4h4a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H5zM19 4h-4a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h4z"/></svg></span>
-        <span class="li-body">
-          <span class="li-title">${escapeHtml(livro.nome)}</span>
-          <span class="li-sub">${extLabel(livro)} · ${fmtBytes(livro.tamanho)}</span>
-        </span>
-        <span class="li-actions">
-          <button class="btn btn-sm btn-primary shared-dl">Ler</button>
-        </span>`;
-      row.querySelector('.shared-dl').onclick = () => baixarShared(livro);
-      box.appendChild(row);
-    });
+    list.slice(0, 6).forEach(livro => box.appendChild(makeSharedRow(livro)));
   };
   if (sharedCache) fill();
   else {
     box.innerHTML = '<p class="muted">Carregando livros da biblioteca compartilhada…</p>';
+    carregarShared(false).then(fill);
+  }
+}
+
+function renderTodos() {
+  const grid = $('#todosGrid'), mineEmpty = $('#todosMineEmpty'), sBox = $('#todosShared'), count = $('#todosCount');
+  if (!grid || !sBox) return;
+  const mine = [...items].sort((a, b) => b.addedAt - a.addedAt);
+  fillGrid(grid, mine);
+  grid.hidden = !mine.length;
+  mineEmpty.hidden = mine.length > 0;
+
+  if (!usuario) {
+    count.textContent = mine.length + ' livros';
+    sBox.innerHTML = '<p class="muted">Entre na sua conta para ver os livros da biblioteca compartilhada.</p>';
+    return;
+  }
+  const fill = () => {
+    if (view !== 'todos') return;
+    const list = sharedCache || [];
+    count.textContent = (mine.length + list.length) + ' livros';
+    if (!list.length) {
+      sBox.innerHTML = `<p class="muted">${escapeHtml(sharedErro || 'Nenhum livro compartilhado ainda.')}</p>`;
+      return;
+    }
+    sBox.innerHTML = '';
+    list.forEach(livro => sBox.appendChild(makeSharedRow(livro)));
+  };
+  if (sharedCache) fill();
+  else {
+    count.textContent = mine.length + ' livros';
+    sBox.innerHTML = '<p class="muted">Carregando livros da biblioteca compartilhada…</p>';
     carregarShared(false).then(fill);
   }
 }
