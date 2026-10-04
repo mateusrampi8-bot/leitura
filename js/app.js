@@ -2362,6 +2362,7 @@ function salvarSessao(res) {
   destravarAuth();
   fecharAuth();
   atualizarAuthUi();
+  render();                                   /* redesenha a tela com a conta logada */
   toast(`Bem-vindo(a), ${usuario.nome}!`);
 }
 
