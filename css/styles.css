@@ -1175,13 +1175,13 @@ mark.hl[data-c="b"] { background: #b7d1f2; }
 .upload-box-bar i { display: block; height: 100%; width: 0; background: var(--sage); border-radius: 999px; transition: width .18s; }
 
 /* ---------------- Biblioteca compartilhada ---------------- */
-#sharedList .list-item.shared {
+.shared-list .list-item.shared {
   padding: 13px 14px;
   background: var(--surface);
   border: 1px solid var(--border-soft);
   box-shadow: var(--shadow-sm);
 }
-#sharedList .li-actions { display: flex; gap: 8px; flex-shrink: 0; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.shared-list .li-actions { display: flex; gap: 8px; flex-shrink: 0; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
 .vote {
   display: inline-flex; align-items: center; gap: 5px;
@@ -1248,9 +1248,9 @@ html[data-theme="dark"] .auth-erro { background: #3a2b2a; border-color: #5a3f3d;
 .field textarea:focus { border-color: var(--sage); }
 
 @media (max-width: 860px) {
-  #sharedList .list-item.shared { flex-wrap: wrap; }
-  #sharedList .li-body { flex: 1 1 calc(100% - 50px); }
-  #sharedList .li-actions { width: 100%; justify-content: flex-start; }
+  .shared-list .list-item.shared { flex-wrap: wrap; }
+  .shared-list .li-body { flex: 1 1 calc(100% - 50px); }
+  .shared-list .li-actions { width: 100%; justify-content: flex-start; }
 }
 
 /* ---------------- Responsivo ---------------- */

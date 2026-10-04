@@ -1373,6 +1373,45 @@ function renderHome() {
   renderGoal(els.goalBox, false);
   renderChart(els.actChart, lastDays(7));
   renderReco();
+  renderSharedHome();
+}
+
+/* Livros do dono direto na tela Início, para não ficarem escondidos */
+function renderSharedHome() {
+  const head = $('#sharedHomeHead'), box = $('#sharedHome');
+  if (!head || !box) return;
+  if (!usuario) { head.hidden = true; box.hidden = true; return; }
+  head.hidden = false;
+  box.hidden = false;
+  const fill = () => {
+    if (view !== 'home') return;
+    const list = sharedCache || [];
+    if (!list.length) {
+      box.innerHTML = `<p class="muted">${escapeHtml(sharedErro || 'Nenhum livro compartilhado ainda.')}</p>`;
+      return;
+    }
+    box.innerHTML = '';
+    list.slice(0, 6).forEach(livro => {
+      const row = document.createElement('div');
+      row.className = 'list-item shared';
+      row.innerHTML = `
+        <span class="lico"><svg viewBox="0 0 24 24"><path d="M5 4h4a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H5zM19 4h-4a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h4z"/></svg></span>
+        <span class="li-body">
+          <span class="li-title">${escapeHtml(livro.nome)}</span>
+          <span class="li-sub">${extLabel(livro)} · ${fmtBytes(livro.tamanho)}</span>
+        </span>
+        <span class="li-actions">
+          <button class="btn btn-sm btn-primary shared-dl">Ler</button>
+        </span>`;
+      row.querySelector('.shared-dl').onclick = () => baixarShared(livro);
+      box.appendChild(row);
+    });
+  };
+  if (sharedCache) fill();
+  else {
+    box.innerHTML = '<p class="muted">Carregando livros da biblioteca compartilhada…</p>';
+    carregarShared(false).then(fill);
+  }
 }
 
 function renderGoal(box, big) {
@@ -2528,7 +2567,7 @@ function renderSharedBody() {
           <b>${livro.dislikes || 0}</b>
         </button>
         <button class="btn btn-sm shared-notes" title="Suas anotações sobre este livro">Anotações</button>
-        <button class="btn btn-sm btn-primary shared-dl">Baixar</button>
+        <button class="btn btn-sm btn-primary shared-dl">Ler</button>
         ${ehAdmin() ? '<button class="btn btn-sm shared-del" title="Excluir da biblioteca compartilhada">Excluir</button>' : ''}
       </span>`;
     row.querySelector('.vote-up').onclick = () => votar(livro, 1);
