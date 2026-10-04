@@ -722,7 +722,7 @@ function ehAudio(val) {
     val.indexOf('nuvem:') === 0;
 }
 
-/* Modo soneca: voz suave e abafada (grave + volume baixo + filtro) para dormir */
+/* Modo soneca: voz suave e mais lenta (volume baixo + corte suave dos agudos) para dormir */
 function noiteVoz() {
   return localStorage.getItem(VOZ_NOITE) === '1';
 }
@@ -879,18 +879,18 @@ async function lerComKokoro(voz, partes, proxima) {
       const noite = noiteVoz();
       const fonte = ctx.createBufferSource();
       fonte.buffer = audio;
-      /* Tom: -100 cents extras no modo soneca (mais grave e lento) */
-      fonte.detune.value = Math.round((vozPitch() - 1) * 1200) - (noite ? 100 : 0);
+      /* Tom: -40 cents extras no modo soneca (discreto, sem deixar a voz "espessa") */
+      fonte.detune.value = Math.round((vozPitch() - 1) * 1200) - (noite ? 40 : 0);
       /* nuvem não recebe a velocidade do servidor: aplica no próprio áudio */
       if (voz.indexOf('nuvem:') === 0) fonte.playbackRate = vozVel();
       const ganho = ctx.createGain();
-      ganho.gain.value = vozVol() * (noite ? 0.75 : 1);          /* Volume */
+      ganho.gain.value = vozVol() * (noite ? 0.7 : 1);          /* Volume */
       if (noite) {
-        /* soneca: filtra os agudos -> voz "abafada", macia como um sussurro */
+        /* soneca: corte suave dos agudos -> voz macia p/ dormir, ainda clara */
         const filtro = ctx.createBiquadFilter();
         filtro.type = 'lowpass';
-        filtro.frequency.value = 1400;
-        filtro.Q.value = 0.7;
+        filtro.frequency.value = 2900;
+        filtro.Q.value = 0.5;
         fonte.connect(filtro).connect(ganho);
       } else {
         fonte.connect(ganho);
@@ -906,8 +906,11 @@ async function lerComKokoro(voz, partes, proxima) {
 
   let idx = 0;
   const buscarParte = (parte) => {
+    /* soneca: pede ao Kokoro uma fala natural mais lenta (qualidade total, sem virar robô) */
+    const velPedir = (voz.indexOf('kokoro:') === 0 && noiteVoz())
+      ? Math.round(vozVel() * 90) / 100 : vozVel();
     const url = vozBase + '?texto=' + encodeURIComponent(parte) +
-      '&voz=' + encodeURIComponent(voz) + '&vel=' + vozVel();
+      '&voz=' + encodeURIComponent(voz) + '&vel=' + velPedir;
     const tentar = () => fetch(url, { signal: ac.signal })
       .then(async resp => {
         /* Google às vezes recusa por excesso: espera um pouco e tenta de novo */
@@ -1024,10 +1027,10 @@ async function speakReader() {
     const voz = vozEscolhida();      /* voz/velocidade valem já na próxima frase */
     if (voz) { try { u.voice = voz; } catch (e) {} u.lang = voz.lang || 'pt-BR'; }
     else { u.lang = 'pt-BR'; }
-    const noite = noiteVoz();        /* soneca: mais lenta, grave e suave */
+    const noite = noiteVoz();        /* soneca: mais lenta e suave */
     u.rate = vozVel() * (noite ? 0.9 : 1);
-    u.pitch = vozPitch() * (noite ? 0.85 : 1);
-    u.volume = vozVol() * (noite ? 0.7 : 1);
+    u.pitch = vozPitch() * (noite ? 0.9 : 1);
+    u.volume = vozVol() * (noite ? 0.75 : 1);
     u.onend = () => { if (speaking) setTimeout(falar, 50); };
     u.onerror = (e) => {
       if (!speaking) return;
@@ -1112,7 +1115,7 @@ els.voiceSel.onchange = () => {
 els.noiteVoice.onchange = () => {
   localStorage.setItem(VOZ_NOITE, els.noiteVoice.checked ? '1' : '0');
   toast(els.noiteVoice.checked
-    ? 'Modo soneca ligado — voz suave, grave e abafada.'
+    ? 'Modo soneca ligado — voz suave e mais lenta para dormir.'
     : 'Modo soneca desligado.');
 };
 
