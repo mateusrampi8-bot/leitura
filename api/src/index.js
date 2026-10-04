@@ -175,6 +175,46 @@ async function listar(env, usuario) {
   }))).filter(Boolean).sort((a, b) => b.enviado - a.enviado);
 }
 
+/* ---------------- Kokoro na nuvem ---------------- */
+/* Kokoro-82M pt-BR servido por espaço público no Hugging Face.
+   Se o espaço estiver dormindo/morto, devolve null e o chamador usa o Google. */
+const KOKORO_NUVEM = 'https://jackpnz-kokoro-pt-br.hf.space';
+const KOKORO_VOZES = ['pf_dora', 'pm_alex', 'pm_santa'];
+
+async function kokoroNuvem(texto, voz, vel) {
+  if (KOKORO_VOZES.indexOf(voz) === -1) return null;
+  const ctrl = new AbortController();
+  const limite = setTimeout(() => ctrl.abort(), 25000);
+  try {
+    const r = await fetch(KOKORO_NUVEM + '/v1/audio/speech', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'kokoro',
+        input: texto,
+        voice: voz,
+        speed: Math.min(2, Math.max(0.5, vel)),
+        response_format: 'mp3'
+      }),
+      signal: ctrl.signal
+    });
+    if (!r.ok) return null;
+    const buf = await r.arrayBuffer();
+    if (!buf.byteLength) return null;
+    return new Response(buf, {
+      headers: {
+        'Content-Type': 'audio/mpeg',
+        'Cache-Control': 'public, max-age=86400',
+        ...CORS
+      }
+    });
+  } catch (e) {
+    return null;
+  } finally {
+    clearTimeout(limite);
+  }
+}
+
 /* ---------------- Roteador ---------------- */
 export default {
   async fetch(request, env) {
@@ -362,15 +402,24 @@ export default {
         return json({ ok: true });
       }
 
-      /* ----- Voz na nuvem (pt-BR natural) ----- */
+      /* ----- Voz na nuvem (Kokoro pt-BR de verdade + Google) ----- */
       if (request.method === 'GET' && p === '/voz/status') {
-        return json({ pronto: true, vozes: ['nuvem:google'] });
+        return json({ pronto: true, vozes: ['kokoro:pf_dora', 'kokoro:pm_alex', 'nuvem:google'] });
       }
 
       if (request.method === 'GET' && p === '/voz') {
         const t = (url.searchParams.get('texto') || '').replace(/\s+/g, ' ').trim();
         if (!t) return erro('Texto vazio.');
         if (t.length > 200) return erro('Texto longo demais (máx. 200 caracteres).');
+        const voz = url.searchParams.get('voz') || '';
+        const vel = Number(url.searchParams.get('vel')) || 1;
+
+        /* Kokoro pt-BR via espaço público no Hugging Face; se falhar, cai para o Google */
+        if (voz.indexOf('kokoro:') === 0) {
+          const kc = await kokoroNuvem(t, voz.slice(7), vel);
+          if (kc) return kc;
+        }
+
         const alvo = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=pt-br&q=' + encodeURIComponent(t);
         const r = await fetch(alvo, {
           headers: {
