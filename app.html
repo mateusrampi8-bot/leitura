@@ -114,6 +114,7 @@
           <header class="greeting">
             <h1 id="greeting">Olá</h1>
             <p id="greetingSub">Que tal continuar de onde parou?</p>
+            <button class="btn btn-primary btn-sortear" id="btnSortear">Não sei o que ler</button>
           </header>
 
           <div id="hero"></div>
@@ -250,6 +251,14 @@
           <p class="muted" id="libCount">0 itens</p>
         </div>
         <div class="page-head-actions">
+          <div class="view-switch" id="viewSwitch">
+            <button data-vista="estante" title="Ver como estante">
+              <svg viewBox="0 0 24 24"><path d="M5 4h4a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H5zM19 4h-4a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h4z"/></svg>
+            </button>
+            <button data-vista="grade" title="Ver como grade">
+              <svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>
+            </button>
+          </div>
           <select id="sort" class="select">
             <option value="recent">Mais recentes</option>
             <option value="name">Nome (A-Z)</option>
@@ -283,6 +292,7 @@
       </div>
 
       <div class="grid" id="grid"></div>
+      <div class="estante3d" id="estante3d" hidden></div>
       <div class="empty" id="empty">
         <p>Sua biblioteca está vazia.</p>
         <p class="muted">Arraste arquivos para a área acima ou clique em “Adicionar”.</p>
@@ -343,6 +353,9 @@
         <div>
           <h1>Estatísticas</h1>
           <p class="muted">Um panorama dos seus hábitos de leitura</p>
+        </div>
+        <div class="page-head-actions">
+          <button class="btn btn-primary" id="btnWrapped">Ver Wrapped do ano</button>
         </div>
       </header>
 
@@ -692,6 +705,35 @@
         <button class="btn btn-primary" id="socSave">Salvar</button>
       </div>
     </footer>
+  </div>
+</div>
+
+<!-- ---------- SORTEIO: NÃO SEI O QUE LER ---------- -->
+<div class="modal-backdrop" id="sorteioModal" hidden>
+  <div class="modal modal-sm" role="dialog" aria-labelledby="sorteioTitle">
+    <header class="modal-head">
+      <h2 id="sorteioTitle">Não sei o que ler</h2>
+      <button class="btn btn-icon" id="sorteioClose" title="Fechar">&#10005;</button>
+    </header>
+    <div class="modal-body sorteio-body">
+      <div class="sorteio-capa girando" id="sorteioCapa"></div>
+      <p class="sorteio-nome" id="sorteioNome">Sorteando…</p>
+      <div class="sorteio-acoes">
+        <button class="btn btn-primary" id="sorteioAbrir" hidden>Abrir este livro</button>
+        <button class="btn" id="sorteioDeNovo">Sortear de novo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ---------- WRAPPED DO ANO ---------- -->
+<div class="wrapped" id="wrapped" hidden>
+  <div class="wrapped-progress" id="wrappedDots"></div>
+  <button class="btn btn-icon wrapped-fechar" id="wrappedClose" title="Fechar">&#10005;</button>
+  <div class="wrapped-slides" id="wrappedSlides"></div>
+  <div class="wrapped-nav">
+    <button class="btn" id="wrappedPrev">Anterior</button>
+    <button class="btn btn-primary" id="wrappedNext">Próximo</button>
   </div>
 </div>
 

@@ -1611,7 +1611,12 @@ function renderShelfChips() {
 function renderLibrary() {
   renderShelfChips();
   const list = visibleItems();
-  fillGrid(els.grid, list);
+  const estante = vistaModo === 'estante';
+  els.grid.hidden = estante;
+  const box = $('#estante3d');
+  if (box) box.hidden = !estante;
+  if (estante) renderEstante(list);
+  else fillGrid(els.grid, list);
   els.empty.hidden = items.length > 0;
   els.libCount.textContent = items.length === 1 ? '1 item' : `${items.length} itens`;
   if (items.length && !list.length) {
@@ -2916,6 +2921,319 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!els.notesModal || !els.notesModal.hidden) fecharNotas();
   else if (!els.authModal || !els.authModal.hidden) fecharAuth();
+});
+
+/* ================= Não sei o que ler (sorteio) ================= */
+let sorteioTimer = null;
+let sorteioEscolhido = null;
+
+const SORTEIO_ICO = '<span class="ico-sortear"><svg viewBox="0 0 24 24"><path d="M5 4h4a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H5zM19 4h-4a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h4z"/></svg></span>';
+
+function fecharSorteio() {
+  if (sorteioTimer) { clearTimeout(sorteioTimer); sorteioTimer = null; }
+  const m = $('#sorteioModal');
+  if (m) m.hidden = true;
+}
+
+async function poolSorteio() {
+  const naoLidos = items.filter(it => progressRatio(it) < 0.99);
+  const base = (naoLidos.length ? naoLidos : items).map(it => ({ tipo: 'local', it }));
+  if (usuario) {
+    try {
+      if (!sharedCache) await carregarShared(false);
+      const sh = (sharedCache || []).map(l => ({ tipo: 'shared', l }));
+      return base.concat(sh);
+    } catch (e) { return base; }
+  }
+  return base;
+}
+
+const sorteioHtml = (p) => (p.tipo === 'local' ? coverHtml(p.it) : SORTEIO_ICO);
+const sorteioNome = (p) => (p.tipo === 'local' ? p.it.title : p.l.nome);
+
+async function sortearLivro(animar) {
+  const capa = $('#sorteioCapa'), nome = $('#sorteioNome'), abrir = $('#sorteioAbrir');
+  if (!capa || !nome || !abrir) return;
+  abrir.hidden = true;
+  if (sorteioTimer) { clearTimeout(sorteioTimer); sorteioTimer = null; }
+  const pool = await poolSorteio();
+  if (!pool.length) {
+    capa.innerHTML = SORTEIO_ICO;
+    nome.textContent = 'Adicione livros para sortear.';
+    return;
+  }
+  let p = pool[Math.floor(Math.random() * pool.length)];
+  if (pool.length > 1 && sorteioEscolhido && p === sorteioEscolhido) {
+    p = pool[(pool.indexOf(p) + 1) % pool.length];
+  }
+
+  const durTotal = animar ? 1400 : 700;
+  let decorrido = 0;
+  let espera = 55;
+  const passo = () => {
+    const r = pool[Math.floor(Math.random() * pool.length)];
+    capa.innerHTML = sorteioHtml(r);
+    nome.textContent = sorteioNome(r) + '…';
+    if (decorrido >= durTotal) {
+      sorteioTimer = null;
+      sorteioEscolhido = p;
+      capa.innerHTML = sorteioHtml(p);
+      nome.textContent = sorteioNome(p);
+      capa.classList.remove('girando', 'parou');
+      void capa.offsetWidth;
+      capa.classList.add('parou');
+      abrir.hidden = false;
+      return;
+    }
+    espera = Math.min(240, espera * 1.16);
+    decorrido += espera;
+    sorteioTimer = setTimeout(passo, espera);
+  };
+  passo();
+}
+
+/* ================= Estante 3D ================= */
+let vistaModo = localStorage.getItem('leitura:vista') === 'grade' ? 'grade' : 'estante';
+
+function setVista(modo) {
+  vistaModo = modo === 'grade' ? 'grade' : 'estante';
+  localStorage.setItem('leitura:vista', vistaModo);
+  document.querySelectorAll('#viewSwitch button').forEach(b =>
+    b.classList.toggle('active', b.dataset.vista === vistaModo));
+  renderLibrary();
+}
+
+function renderEstante(list) {
+  const box = $('#estante3d');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!list.length) return;
+  const w = box.clientWidth || 660;
+  const porLinha = Math.max(3, Math.floor((w + 14) / 100));
+  for (let i = 0; i < list.length; i += porLinha) {
+    const row = document.createElement('div');
+    row.className = 'prateleira';
+    const livros = document.createElement('div');
+    livros.className = 'prateleira-livros';
+    list.slice(i, i + porLinha).forEach(it => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'livro-3d';
+      b.title = it.title + (it.author ? ' — ' + it.author : '');
+      const r = progressRatio(it);
+      b.innerHTML = `<span class="livro-capa">${coverHtml(it)}</span>` +
+        (r > 0 ? `<span class="livro-barra"><i style="width:${Math.round(r * 100)}%"></i></span>` : '') +
+        (r >= 0.99 ? '<span class="livro-check">&#10003;</span>' : '');
+      b.onclick = () => openItem(it);
+      livros.appendChild(b);
+    });
+    const madeira = document.createElement('div');
+    madeira.className = 'prateleira-madeira';
+    row.append(livros, madeira);
+    box.appendChild(row);
+  }
+}
+
+/* ================= Wrapped do ano ================= */
+let wrappedSlides = [];
+let wrappedIdx = 0;
+
+function wrappedDados() {
+  const ano = new Date().getFullYear();
+  const anoStr = String(ano);
+  const act = getActivity();
+  const secAno = Object.entries(act).filter(([k]) => k.indexOf(anoStr) === 0)
+    .reduce((s, [, v]) => s + v, 0);
+  const concluidos = items.filter(isDone).length;
+  const meta = getMeta();
+
+  /* recorde de dias seguidos no ano */
+  const dias = Object.keys(act).filter(k => k.indexOf(anoStr) === 0 && act[k] > 0).sort();
+  let maxSeq = 0, seq = 0, ant = null;
+  for (const k of dias) {
+    if (ant) {
+      const [a1, m1, d1] = ant.split('-').map(Number);
+      const [a2, m2, d2] = k.split('-').map(Number);
+      const diff = Math.round((Date.UTC(a2, m2 - 1, d2) - Date.UTC(a1, m1 - 1, d1)) / 86400000);
+      seq = diff === 1 ? seq + 1 : 1;
+    } else seq = 1;
+    if (seq > maxSeq) maxSeq = seq;
+    ant = k;
+  }
+
+  /* mês com mais leitura */
+  const meses = {};
+  for (const [k, v] of Object.entries(act)) {
+    if (k.indexOf(anoStr) !== 0) continue;
+    const m = k.slice(5, 7);
+    meses[m] = (meses[m] || 0) + v;
+  }
+  let mesId = '', mesVal = 0;
+  for (const [m, v] of Object.entries(meses)) if (v > mesVal) { mesVal = v; mesId = m; }
+  const nomesMes = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  const mesFort = mesId ? nomesMes[parseInt(mesId, 10) - 1] : '—';
+
+  /* autor favorito */
+  const auts = {};
+  items.forEach(it => { const a = (it.author || '').trim(); if (a) auts[a] = (auts[a] || 0) + 1; });
+  let autorFav = '', autorN = 0;
+  for (const [a, n] of Object.entries(auts)) if (n > autorN) { autorN = n; autorFav = a; }
+
+  /* tipo preferido */
+  const tipos = {};
+  items.forEach(it => { const t = typeLabel(it); tipos[t] = (tipos[t] || 0) + 1; });
+  let tipoFav = '', tipoN = 0;
+  for (const [t, n] of Object.entries(tipos)) if (n > tipoN) { tipoN = n; tipoFav = t; }
+
+  const melhor = [...items].sort((a, b) => ratingOf(b) - ratingOf(a) || b.addedAt - a.addedAt)[0] || null;
+  const adicionados = items.filter(it => new Date(it.addedAt).getFullYear() === ano).length;
+
+  return { ano, secAno, concluidos, meta, maxSeq, mesFort, mesVal, autorFav, autorN, tipoFav, melhor, adicionados };
+}
+
+function renderWrapped() {
+  const box = $('#wrappedSlides'), dots = $('#wrappedDots');
+  const s = wrappedSlides[wrappedIdx];
+  if (!box || !s) return;
+  box.innerHTML = `<div class="w-slide ${s.cls}">${s.html}</div>`;
+  dots.innerHTML = wrappedSlides.map((_, i) => `<i class="${i <= wrappedIdx ? 'on' : ''}"></i>`).join('');
+  $('#wrappedPrev').disabled = wrappedIdx === 0;
+  $('#wrappedNext').textContent = wrappedIdx === wrappedSlides.length - 1 ? 'Fechar' : 'Próximo';
+  const b = $('#wrappedBaixar');
+  if (b) b.onclick = baixarWrapped;
+}
+
+function abrirWrapped() {
+  const d = wrappedDados();
+  const nome = usuario ? String(usuario.nome || 'leitor').split(' ')[0] : 'leitor';
+  const barra = (v) => `<div class="w-barra"><i style="width:${Math.min(100, Math.round(v * 100))}%"></i></div>`;
+  wrappedSlides = [
+    { cls: 'w1', html: `<div class="w-kicker">Wrapped</div><div class="w-ano">${d.ano}</div><p>Olá, ${escapeHtml(nome)}! Estes foram os seus números de leitura.</p>` },
+    { cls: 'w2', html: `<div class="w-num">${d.concluidos}</div><div class="w-lbl">livros concluídos</div><div class="w-sub">meta de ${d.meta} no ano · ${d.adicionados} adicionados</div>${barra(d.meta ? d.concluidos / d.meta : 0)}` },
+    { cls: 'w3', html: `<div class="w-num">${fmtHours(d.secAno)}</div><div class="w-lbl">de leitura em ${d.ano}</div>` },
+    { cls: 'w4', html: `<div class="w-num">${d.maxSeq}</div><div class="w-lbl">dias seguidos lendo (recorde)</div>` },
+    { cls: 'w5', html: `<div class="w-med">${escapeHtml(d.mesFort)}</div><div class="w-lbl">mês mais forte</div><div class="w-sub">${fmtHours(d.mesVal)} de leitura</div>` },
+    ...(d.autorFav ? [{ cls: 'w6', html: `<div class="w-med">${escapeHtml(d.autorFav)}</div><div class="w-lbl">autor favorito</div><div class="w-sub">${d.autorN} livro(s) na estante</div>` }] : []),
+    { cls: 'w7', html: `<div class="w-sub2">Tipo preferido</div><div class="w-med">${escapeHtml(d.tipoFav || '—')}</div>${d.melhor ? `<div class="w-sub">Melhor nota: ${escapeHtml(d.melhor.title)}</div>` : ''}` },
+    { cls: 'w8', html: `<div class="w-ano">${d.ano}</div><p>É isso por aqui. Continue lendo!</p><button class="btn btn-primary" id="wrappedBaixar">Baixar imagem</button>` }
+  ];
+  wrappedIdx = 0;
+  renderWrapped();
+  $('#wrapped').hidden = false;
+}
+
+function fecharWrapped() {
+  const w = $('#wrapped');
+  if (w) w.hidden = true;
+}
+
+function wrappedIr(delta) {
+  const novo = wrappedIdx + delta;
+  if (novo < 0) return;
+  if (novo >= wrappedSlides.length) { fecharWrapped(); return; }
+  wrappedIdx = novo;
+  renderWrapped();
+}
+
+function baixarWrapped() {
+  const d = wrappedDados();
+  const c = document.createElement('canvas');
+  c.width = 1080; c.height = 1920;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 1080, 1920);
+  g.addColorStop(0, '#2f4a37');
+  g.addColorStop(.55, '#4c6f50');
+  g.addColorStop(1, '#7d9a7a');
+  x.fillStyle = g;
+  x.fillRect(0, 0, 1080, 1920);
+  x.fillStyle = 'rgba(255,255,255,.09)';
+  x.beginPath(); x.arc(940, 260, 340, 0, Math.PI * 2); x.fill();
+  x.beginPath(); x.arc(120, 1650, 420, 0, Math.PI * 2); x.fill();
+
+  x.textAlign = 'center';
+  x.fillStyle = '#eef3ec';
+  x.font = '700 58px system-ui, sans-serif';
+  x.fillText('W R A P P E D', 540, 360);
+  x.font = '800 230px system-ui, sans-serif';
+  x.fillText(String(d.ano), 540, 610);
+
+  const linhas = [
+    `${d.concluidos} livro(s) concluido(s) — meta ${d.meta}`,
+    `${fmtHours(d.secAno)} de leitura`,
+    `Recorde: ${d.maxSeq} dias seguidos`,
+    d.mesFort !== '—' ? `Mes mais forte: ${d.mesFort}` : '',
+    d.autorFav ? `Autor favorito: ${d.autorFav}` : '',
+    d.tipoFav ? `Tipo preferido: ${d.tipoFav}` : ''
+  ].filter(Boolean);
+  x.fillStyle = '#ffffff';
+  x.font = '600 54px system-ui, sans-serif';
+  let y = 900;
+  linhas.forEach(l => { x.fillText(l, 540, y); y += 130; });
+
+  x.fillStyle = 'rgba(255,255,255,.75)';
+  x.font = '400 44px system-ui, sans-serif';
+  x.fillText('Leitura · sua biblioteca', 540, 1810);
+
+  c.toBlob(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `wrapped-${d.ano}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast('Imagem salva.');
+  });
+}
+
+/* Ligações: sorteio, estante e wrapped */
+const btnSortearEl = $('#btnSortear');
+if (btnSortearEl) {
+  btnSortearEl.onclick = async () => {
+    $('#sorteioModal').hidden = false;
+    await sortearLivro(true);
+  };
+}
+if ($('#sorteioClose')) {
+  $('#sorteioClose').onclick = fecharSorteio;
+  $('#sorteioModal').onclick = (e) => { if (e.target.id === 'sorteioModal') fecharSorteio(); };
+  $('#sorteioDeNovo').onclick = () => sortearLivro(true);
+  $('#sorteioAbrir').onclick = () => {
+    const p = sorteioEscolhido;
+    fecharSorteio();
+    if (!p) return;
+    if (p.tipo === 'local') openItem(p.it);
+    else baixarShared(p.l);
+  };
+}
+const viewSwitchEl = $('#viewSwitch');
+if (viewSwitchEl) {
+  viewSwitchEl.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('active', b.dataset.vista === vistaModo);
+    b.onclick = () => setVista(b.dataset.vista);
+  });
+}
+const btnWrappedEl = $('#btnWrapped');
+if (btnWrappedEl) btnWrappedEl.onclick = abrirWrapped;
+if ($('#wrappedClose')) {
+  $('#wrappedClose').onclick = fecharWrapped;
+  $('#wrappedNext').onclick = () => wrappedIr(1);
+  $('#wrappedPrev').onclick = () => wrappedIr(-1);
+}
+let estanteResizeT = null;
+window.addEventListener('resize', () => {
+  if (view !== 'biblioteca' || vistaModo !== 'estante') return;
+  clearTimeout(estanteResizeT);
+  estanteResizeT = setTimeout(() => renderLibrary(), 200);
+});
+document.addEventListener('keydown', (e) => {
+  const w = $('#wrapped');
+  if (w && !w.hidden) {
+    if (e.key === 'Escape') fecharWrapped();
+    else if (e.key === 'ArrowRight') wrappedIr(1);
+    else if (e.key === 'ArrowLeft') wrappedIr(-1);
+    return;
+  }
+  const s = $('#sorteioModal');
+  if (s && !s.hidden && e.key === 'Escape') fecharSorteio();
 });
 
 /* ================= Início ================= */

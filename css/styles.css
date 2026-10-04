@@ -1285,3 +1285,155 @@ html[data-theme="dark"] .auth-erro { background: #3a2b2a; border-color: #5a3f3d;
   .hero-progress { flex-direction: column; gap: 8px; }
   .hero-actions { justify-content: center; }
 }
+
+/* ---------------- Botão: não sei o que ler ---------------- */
+.btn-sortear { margin-top: 10px; box-shadow: 0 8px 20px rgba(95, 125, 97, .3); }
+.btn-sortear:hover { transform: translateY(-1px); }
+
+/* ---------------- Alternador grade/estante ---------------- */
+.view-switch {
+  display: inline-flex; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 12px; padding: 3px; gap: 2px;
+}
+.view-switch button {
+  border: 0; background: transparent; border-radius: 9px;
+  width: 34px; height: 30px; display: grid; place-items: center;
+  color: var(--muted); cursor: pointer; transition: .15s;
+}
+.view-switch button svg { width: 17px; height: 17px; }
+.view-switch button:hover { color: var(--text); }
+.view-switch button.active { background: var(--surface); color: var(--sage-deep); box-shadow: var(--shadow-sm); }
+
+/* ---------------- Estante 3D ---------------- */
+.estante3d {
+  display: flex; flex-direction: column; gap: 30px;
+  perspective: 900px; padding: 6px 0 10px;
+}
+.prateleira { position: relative; }
+.prateleira-livros {
+  display: flex; align-items: flex-end; justify-content: center;
+  gap: 12px; padding: 0 16px 0; min-height: 132px;
+}
+.livro-3d {
+  position: relative; flex: 0 0 auto;
+  width: 84px; height: 126px;
+  border: 0; padding: 0; cursor: pointer;
+  border-radius: 3px 7px 7px 3px;
+  background: var(--surface-3);
+  box-shadow: 2px 4px 10px rgba(0, 0, 0, .28), inset -3px 0 6px rgba(0, 0, 0, .18);
+  transform-style: preserve-3d;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.livro-3d:hover, .livro-3d:focus-visible {
+  transform: translateY(-10px) rotateY(-14deg);
+  box-shadow: 8px 12px 22px rgba(0, 0, 0, .3);
+  z-index: 2; outline: none;
+}
+.livro-capa { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; display: block; }
+.livro-capa .cover, .livro-capa img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
+.livro-3d::before {                       /* lombada */
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 10px; z-index: 2;
+  background: linear-gradient(90deg, rgba(0, 0, 0, .35), rgba(255, 255, 255, .14) 65%, rgba(0, 0, 0, .12));
+  border-radius: 3px 0 0 3px;
+}
+.livro-3d::after {                        /* brilho */
+  content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: linear-gradient(118deg, rgba(255, 255, 255, .34) 0%, rgba(255, 255, 255, .06) 34%, transparent 55%);
+  border-radius: inherit;
+}
+.livro-barra {
+  position: absolute; left: 10px; right: 0; bottom: 0; height: 4px; z-index: 3;
+  background: rgba(0, 0, 0, .35); border-radius: 0 0 6px 0;
+}
+.livro-barra i { display: block; height: 100%; background: var(--sage); border-radius: 0 4px 4px 0; }
+.livro-check {
+  position: absolute; top: 5px; right: 5px; z-index: 3;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--sage-deep); color: #fff;
+  font-size: 11px; font-weight: 800; display: grid; place-items: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .3);
+}
+.prateleira-madeira {
+  height: 15px; border-radius: 4px;
+  background: linear-gradient(#a06b3d 0%, #7c4f28 45%, #5d3a1d 100%);
+  box-shadow: 0 8px 14px rgba(0, 0, 0, .28), inset 0 2px 0 rgba(255, 255, 255, .22), inset 0 -3px 5px rgba(0, 0, 0, .3);
+  position: relative;
+}
+.prateleira-madeira::after {
+  content: ''; position: absolute; left: 3%; right: 3%; top: 100%; height: 7px;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, .22), transparent 70%);
+}
+
+/* ---------------- Sorteio ---------------- */
+.modal-sm { width: min(430px, 100%); }
+.sorteio-body { align-items: center; text-align: center; gap: 14px; }
+.sorteio-capa {
+  width: 168px; height: 244px; border-radius: 8px 14px 14px 8px;
+  background: var(--surface-3); position: relative; overflow: hidden;
+  box-shadow: 4px 8px 24px rgba(0, 0, 0, .25), inset -4px 0 8px rgba(0, 0, 0, .16);
+  display: grid; place-items: center;
+}
+.sorteio-capa::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 14px; z-index: 2;
+  background: linear-gradient(90deg, rgba(0, 0, 0, .32), rgba(255, 255, 255, .14));
+}
+.sorteio-capa::after {
+  content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: linear-gradient(118deg, rgba(255, 255, 255, .3), transparent 50%);
+}
+.sorteio-capa img { width: 100%; height: 100%; object-fit: cover; }
+.sorteio-capa .ico-sortear svg { width: 54px; height: 54px; color: var(--muted); }
+.sorteio-capa.girando { animation: sorteioGira .16s ease; }
+.sorteio-capa.parou { animation: sorteioPara .5s cubic-bezier(.2, 1.4, .4, 1); }
+@keyframes sorteioGira { from { transform: scale(.96) rotate(-2deg); } to { transform: none; } }
+@keyframes sorteioPara { 0% { transform: scale(1.1) rotate(2deg); } 100% { transform: none; } }
+.sorteio-nome { font-family: var(--display); font-size: 19px; font-weight: 600; min-height: 26px; color: var(--text); }
+.sorteio-acoes { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+/* ---------------- Wrapped do ano ---------------- */
+.wrapped {
+  position: fixed; inset: 0; z-index: 120;
+  background: #14181a; color: #fff;
+  display: flex; flex-direction: column; align-items: center;
+  animation: fade .2s ease;
+}
+.wrapped-progress { display: flex; gap: 6px; width: min(560px, 92%); margin: 16px 0 4px; }
+.wrapped-progress i { flex: 1; height: 4px; border-radius: 4px; background: rgba(255, 255, 255, .25); transition: .2s; }
+.wrapped-progress i.on { background: #fff; }
+.wrapped-fechar {
+  position: absolute; top: 30px; right: 22px; z-index: 3;
+  color: rgba(255, 255, 255, .85); background: rgba(0, 0, 0, .25); border-radius: 50%;
+}
+.wrapped-slides { flex: 1; width: min(560px, 94%); display: grid; place-items: center; overflow: hidden; }
+.w-slide {
+  grid-area: 1 / 1; text-align: center; padding: 30px 18px;
+  animation: wSlide .35s ease;
+}
+@keyframes wSlide { from { opacity: 0; transform: translateY(26px) scale(.97); } to { opacity: 1; transform: none; } }
+.w-slide.w1, .w-slide.w8 { background: linear-gradient(150deg, #31543c, #567a51 55%, #7d9a7a); }
+.w-slide.w2, .w-slide.w4 { background: linear-gradient(150deg, #8a5a2f, #c08a4e); }
+.w-slide.w3, .w-slide.w6 { background: linear-gradient(150deg, #33566b, #5b86a0); }
+.w-slide.w5, .w-slide.w7 { background: linear-gradient(150deg, #6b4a86, #9a76b5); }
+.w-slide { border-radius: 26px; min-height: min(560px, 66vh); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 24px 60px rgba(0, 0, 0, .4); }
+.w-kicker { text-transform: uppercase; letter-spacing: 6px; font-size: 15px; opacity: .8; font-weight: 700; }
+.w-ano { font-size: clamp(74px, 16vw, 120px); font-weight: 800; line-height: 1; }
+.w-num { font-size: clamp(64px, 13vw, 104px); font-weight: 800; line-height: 1; }
+.w-med { font-size: clamp(34px, 7vw, 54px); font-weight: 800; line-height: 1.1; padding: 0 14px; word-break: break-word; }
+.w-lbl { font-size: 20px; opacity: .9; font-weight: 600; }
+.w-sub { font-size: 15.5px; opacity: .8; margin-top: 6px; }
+.w-sub2 { font-size: 14px; text-transform: uppercase; letter-spacing: 4px; opacity: .75; font-weight: 700; }
+.w-slide p { font-size: 20px; opacity: .92; max-width: 400px; }
+.w-barra { width: min(320px, 80%); height: 12px; background: rgba(255, 255, 255, .25); border-radius: 999px; overflow: hidden; margin-top: 14px; }
+.w-barra i { display: block; height: 100%; background: #fff; border-radius: 999px; }
+.wrapped-nav {
+  display: flex; gap: 12px; justify-content: center;
+  padding: 16px 0 26px; width: min(560px, 92%);
+}
+.wrapped-nav .btn { background: rgba(255, 255, 255, .14); border-color: rgba(255, 255, 255, .3); color: #fff; }
+.wrapped-nav .btn:hover { background: rgba(255, 255, 255, .24); }
+.wrapped-nav .btn:disabled { opacity: .35; cursor: default; }
+
+@media (max-width: 860px) {
+  .prateleira-livros { gap: 9px; min-height: 112px; padding: 0 8px; }
+  .livro-3d { width: 70px; height: 105px; }
+}
