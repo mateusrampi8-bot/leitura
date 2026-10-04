@@ -2060,7 +2060,8 @@ async function openItem(item) {
   hlPosKey = null;
   els.notesPanel.hidden = true;
   els.typePanel.hidden = true;
-  els.btnType.hidden = !(item.type === 'epub' || item.type === 'text');
+  els.typePanel.dataset.tipo = item.type;
+  els.btnType.hidden = !(item.type === 'epub' || item.type === 'text' || item.type === 'pdf');
   els.btnSpeak.hidden = !(item.type === 'epub' || item.type === 'text' || item.type === 'pdf');
   els.findBar.hidden = true;
   findTerm = '';

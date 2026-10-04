@@ -801,6 +801,8 @@ svg.i { width: 17px; height: 17px; }
 .type-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .type-row-voz { gap: 8px; }
 .type-row-voz .select-sm { max-width: 168px; padding: 6px 9px; font-size: 12.5px; }
+/* PDF: só interessa a voz (fonte/coluna não alteram o PDF renderizado) */
+#typePanel[data-tipo="pdf"] .type-row-html { display: none; }
 .type-slider { margin-top: 10px; }
 .slider-head {
   display: flex; justify-content: space-between; align-items: baseline;
