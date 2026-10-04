@@ -2652,7 +2652,10 @@ async function baixarShared(livro) {
     if (!res.ok) throw new Error('Falha no download (' + res.status + ')');
     const blob = await res.blob();
     const file = new File([blob], livro.nome, { type: livro.tipo });
+    const idsAntes = new Set(items.map(i => i.id));
     await importFiles([file]);
+    const novo = items.find(i => !idsAntes.has(i.id));
+    if (novo) await openItem(novo);          /* baixou e já abre o livro para ler */
   } catch (e) {
     toast('Erro ao baixar: ' + e.message, 5000);
   }
