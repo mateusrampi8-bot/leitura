@@ -844,7 +844,13 @@ function setSpeaking(v) {
   }
 }
 
-function coletarPartes(maxTam) {
+async function coletarPartes(maxTam) {
+  if (currentItem && currentItem.type === 'pdf') {
+    if (!currentApi || !currentApi.getPageText) return null;
+    let txt = '';
+    try { txt = await currentApi.getPageText(); } catch (e) { return null; }
+    return txt ? [txt].flatMap(t => dividirTexto(t, maxTam)) : null;
+  }
   const walker = document.createTreeWalker(els.readerBody, NodeFilter.SHOW_TEXT);
   const nos = [];
   while (walker.nextNode()) {
@@ -857,7 +863,7 @@ function coletarPartes(maxTam) {
 }
 
 /* Leitura com voz neural: pede um WAV por trecho ao servidor local e toca via WebAudio */
-async function lerComKokoro(voz, partes) {
+async function lerComKokoro(voz, partes, proxima) {
   const meuId = ++kokoroLoop;
   const ac = new AbortController();
   kokoroAbort = ac;
@@ -926,7 +932,17 @@ async function lerComKokoro(voz, partes) {
   try {
     let pend = proximaBusca();
     while (speaking && meuId === kokoroLoop) {
-      if (!pend) { setSpeaking(false); toast('Leitura concluída.'); return; }
+      if (!pend) {
+        /* acabou este trecho: no PDF, busca a próxima página antes de parar */
+        if (proxima && speaking && meuId === kokoroLoop) {
+          let novas = null;
+          try { novas = await proxima(); } catch (e) {}
+          if (novas && novas.length && speaking && meuId === kokoroLoop) {
+            partes = novas; idx = 0; pend = proximaBusca(); continue;
+          }
+        }
+        setSpeaking(false); toast('Leitura concluída.'); return;
+      }
       const buf = await pend;
       /* já busca o próximo trecho enquanto o atual é falado (sem pausa entre frases) */
       pend = (speaking && meuId === kokoroLoop) ? proximaBusca() : null;
@@ -956,11 +972,31 @@ async function speakReader() {
 
   const aud = vozAudioAtual();
   /* nuvem aceita no máx. 200 caracteres por chamada */
-  const partes = coletarPartes(aud ? (vozBase === SHARED_API + '/voz' ? 180 : 220) : 140);
+  const max = aud ? (vozBase === SHARED_API + '/voz' ? 180 : 220) : 140;
+  let partes = await coletarPartes(max);
   if (!partes) { toast('Nada para ler nesta página.'); return; }
+
+  /* PDF: lê a página atual e avança sozinho até o fim do livro */
+  let proxima = null;
+  if (currentItem && currentItem.type === 'pdf' && currentApi && currentApi.getPageText && currentApi.goTo) {
+    proxima = async () => {
+      if (!speaking || !currentApi || !currentApi.getPage) return null;
+      const total = currentApi.getNumPages ? currentApi.getNumPages() : 0;
+      let n = currentApi.getPage();
+      while (speaking && n < total) {
+        n++;
+        try { currentApi.goTo(n); } catch (e) { return null; }
+        let txt = '';
+        try { txt = await currentApi.getPageText(); } catch (e) { return null; }
+        if (speaking && txt && txt.trim()) return dividirTexto(txt, max);
+      }
+      return null;
+    };
+  }
+
   if (aud) {
     try { ctxAudio(); } catch (e) {}      /* cria e destrava o áudio dentro do clique (exigência do celular) */
-    await lerComKokoro(aud, partes);
+    await lerComKokoro(aud, partes, proxima);
     return;
   }
 
@@ -973,7 +1009,17 @@ async function speakReader() {
   setSpeaking(true);
   const falar = () => {
     if (!speaking) return;
-    if (idx >= partes.length) { setSpeaking(false); toast('Leitura concluída.'); return; }
+    if (idx >= partes.length) {
+      if (proxima) {
+        proxima().then(n => {
+          if (!speaking) return;
+          if (n && n.length) { partes = n; idx = 0; falar(); }
+          else { setSpeaking(false); toast('Leitura concluída.'); }
+        }).catch(() => { if (speaking) { setSpeaking(false); toast('Leitura concluída.'); } });
+        return;
+      }
+      setSpeaking(false); toast('Leitura concluída.'); return;
+    }
     const u = new SpeechSynthesisUtterance(partes[idx++]);
     const voz = vozEscolhida();      /* voz/velocidade valem já na próxima frase */
     if (voz) { try { u.voice = voz; } catch (e) {} u.lang = voz.lang || 'pt-BR'; }
@@ -2010,7 +2056,7 @@ async function openItem(item) {
   els.notesPanel.hidden = true;
   els.typePanel.hidden = true;
   els.btnType.hidden = !(item.type === 'epub' || item.type === 'text');
-  els.btnSpeak.hidden = !(item.type === 'epub' || item.type === 'text');
+  els.btnSpeak.hidden = !(item.type === 'epub' || item.type === 'text' || item.type === 'pdf');
   els.findBar.hidden = true;
   findTerm = '';
   els.readerTitle.textContent = item.title;

@@ -92,7 +92,17 @@ const PdfReader = (() => {
        <span>${formatBytes(item.size)}</span>`;
 
     await render();
-    return { onKey, onResize: render, dispose, goTo: (n) => go(n), find };
+    return {
+      onKey, onResize: render, dispose, goTo: (n) => go(n), find,
+      getPageText: pageText, getPage: () => pageNum, getNumPages: () => (pdf ? pdf.numPages : 0)
+    };
+  }
+
+  async function pageText() {
+    if (!pdf) return '';
+    const page = await pdf.getPage(pageNum);
+    const tc = await page.getTextContent();
+    return tc.items.map(x => x.str || '').join(' ').replace(/\s+/g, ' ').trim();
   }
 
   async function find(term, dir) {
