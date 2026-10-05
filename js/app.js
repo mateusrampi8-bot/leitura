@@ -37,7 +37,7 @@ const els = {
   velRange: $('#velRange'), velVal: $('#velVal'),
   pitchRange: $('#pitchRange'), pitchVal: $('#pitchVal'),
   volRange: $('#volRange'), volVal: $('#volVal'),
-  noiteVoice: $('#noiteVoice'), musicaFundo: $('#musicaFundo'),
+  musicaFundo: $('#musicaFundo'),
   btnAdd: $('#btnAdd'), btnAddSide: $('#btnAddSide'), btnAddLib: $('#btnAddLib'),
   btnModeTop: $('#btnModeTop'),   btnExport: $('#btnExport'), btnImport: $('#btnImport'),
   fileBackup: $('#fileBackup'),
@@ -630,7 +630,6 @@ const VOZ_SEL = 'leitura:voz';
 const VOZ_VEL = 'leitura:vozvel';
 const VOZ_PITCH = 'leitura:vozpitch';
 const VOZ_VOL = 'leitura:vozvol';
-const VOZ_NOITE = 'leitura:voznoite';
 
 /* Pontua as vozes: pt-BR neural/natural primeiro (bem menos robótica) */
 function listVoices() {
@@ -720,11 +719,6 @@ function nomeAudio(val) {
 function ehAudio(val) {
   return val.indexOf('kokoro:') === 0 || val.indexOf('piper:') === 0 ||
     val.indexOf('nuvem:') === 0;
-}
-
-/* Modo soneca: voz suave e mais lenta (volume baixo + corte suave dos agudos) para dormir */
-function noiteVoz() {
-  return localStorage.getItem(VOZ_NOITE) === '1';
 }
 
 function aplicarStatusVoz(j, base) {
@@ -897,38 +891,14 @@ async function lerComKokoro(voz, partes, proxima) {
       const audio = await ctx.decodeAudioData(buf);
       if (!speaking || meuId !== kokoroLoop) return false;
       if (ctx.state !== 'running') return false;      /* celular bloqueou o áudio: não trava */
-      const noite = noiteVoz();
       const fonte = ctx.createBufferSource();
       fonte.buffer = audio;
-      /* Tom: a soneca NÃO mexe no tom nem na velocidade (isso distorce a voz neural) */
       fonte.detune.value = Math.round((vozPitch() - 1) * 1200);
       /* nuvem não recebe a velocidade do servidor: aplica no próprio áudio */
       if (voz.indexOf('nuvem:') === 0) fonte.playbackRate = vozVel();
       const ganho = ctx.createGain();
-      ganho.gain.value = vozVol() * (noite ? 0.62 : 1);         /* Volume */
-      if (noite) {
-        /* soneca: leve corte de brilho + dinâmica macia + reverbinho curto
-           -> som suave e arejado (como um susurro), sem virar "pesado" */
-        const filtro = ctx.createBiquadFilter();
-        filtro.type = 'lowpass';
-        filtro.frequency.value = 4200;
-        filtro.Q.value = 0.4;
-        const comp = ctx.createDynamicsCompressor();
-        try {
-          comp.threshold.value = -20; comp.knee.value = 30;
-          comp.ratio.value = 2; comp.attack.value = 0.03; comp.release.value = 0.35;
-        } catch (e) {}
-        fonte.connect(filtro).connect(comp).connect(ganho);
-        try {
-          const rev = ctx.createConvolver();
-          rev.buffer = irCurta(ctx, 0.7);
-          const wet = ctx.createGain();
-          wet.gain.value = 0.15;
-          comp.connect(rev).connect(wet).connect(ganho);
-        } catch (e) {}
-      } else {
-        fonte.connect(ganho);
-      }
+      ganho.gain.value = vozVol();                              /* Volume */
+      fonte.connect(ganho);
       ganho.connect(ctx.destination);
       kokoroFonte = fonte;
       return await new Promise(res => {
@@ -1058,10 +1028,9 @@ async function speakReader() {
     const voz = vozEscolhida();      /* voz/velocidade valem já na próxima frase */
     if (voz) { try { u.voice = voz; } catch (e) {} u.lang = voz.lang || 'pt-BR'; }
     else { u.lang = 'pt-BR'; }
-    const noite = noiteVoz();        /* soneca: mais lenta e suave */
-    u.rate = vozVel() * (noite ? 0.9 : 1);
-    u.pitch = vozPitch() * (noite ? 0.9 : 1);
-    u.volume = vozVol() * (noite ? 0.75 : 1);
+    u.rate = vozVel();
+    u.pitch = vozPitch();
+    u.volume = vozVol();
     u.onend = () => { if (speaking) setTimeout(falar, 50); };
     u.onerror = (e) => {
       if (!speaking) return;
@@ -1107,7 +1076,6 @@ function sincronizaSliderVoz() {
   els.velRange.value = vozVel();
   els.pitchRange.value = vozPitch();
   els.volRange.value = vozVol();
-  if (els.noiteVoice) els.noiteVoice.checked = noiteVoz();
   if (els.musicaFundo) els.musicaFundo.checked = musicaDesejada();
   atualizaRotulosVoz();
 }
@@ -1144,117 +1112,226 @@ els.voiceSel.onchange = () => {
   toast('Voz: ' + els.voiceSel.options[els.voiceSel.selectedIndex].text);
 };
 
-els.noiteVoice.onchange = () => {
-  localStorage.setItem(VOZ_NOITE, els.noiteVoice.checked ? '1' : '0');
-  toast(els.noiteVoice.checked
-    ? 'Modo soneca ligado — voz suave como um susurro.'
-    : 'Modo soneca desligado.');
-};
-
-/* ================= Música de fundo relaxante (sintetizada no navegador) ================= */
+/* ================= Música de fundo lo-fi (sintetizada no navegador) ================= */
 const MUSICA_KEY = 'leitura:musica';
+/* progressão lo-fi/jazz: Fmaj7 → Em7 → Dm7 → Cmaj7 (2 compassos cada) */
 const ACORDES_MUS = [
-  [130.81, 164.81, 196.00, 246.94],   /* Cmaj7 */
-  [110.00, 130.81, 164.81, 196.00],   /* Am7   */
-  [ 87.31, 110.00, 130.81, 164.81],   /* Fmaj7 */
-  [ 98.00, 123.47, 146.83, 196.00]    /* G     */
+  { notas: [174.61, 220.00, 261.63, 329.63], baixo: 87.31 },   /* Fmaj7 */
+  { notas: [164.81, 196.00, 246.94, 293.66], baixo: 82.41 },   /* Em7   */
+  { notas: [146.83, 174.61, 220.00, 261.63], baixo: 73.42 },   /* Dm7   */
+  { notas: [130.81, 164.81, 196.00, 246.94], baixo: 65.41 }    /* Cmaj7 */
 ];
-let mus = null;                        /* { ctx, master, oscs, lfo, ruido, timer } */
+const LOFI_BPM = 72;
+let mus = null;                        /* { ctx, master, timer, vinil, wob } */
 let musNoAr = false;
 let musFalando = false;
+let _ruidoBuf = null;
+let _vinilBuf = null;
 
 function musicaDesejada() { return localStorage.getItem(MUSICA_KEY) === '1'; }
 function musVolAlvo() { return musFalando ? 0.17 : 0.32; }   /* abaixa p/ falar por cima */
+
+function ruidoBuf(ctx) {                 /* chuva curta p/ bateria (reaproveitada) */
+  if (_ruidoBuf) return _ruidoBuf;
+  const n = Math.floor(ctx.sampleRate * 0.6);
+  const b = ctx.createBuffer(1, n, ctx.sampleRate);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  _ruidoBuf = b;
+  return b;
+}
+
+function vinilBuf(ctx) {                 /* chiado de disco + estalos aleatórios */
+  if (_vinilBuf) return _vinilBuf;
+  const sr = ctx.sampleRate, n = Math.floor(sr * 3);
+  const b = ctx.createBuffer(1, n, sr);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * 0.012;
+  let i = 0;
+  while (i < n) {
+    i += 300 + Math.floor(Math.random() * sr * 0.08);
+    if (i >= n) break;
+    const amp = 0.04 + Math.random() * 0.14;
+    const dur = 20 + Math.floor(Math.random() * 150);
+    for (let j = 0; j < dur && i + j < n; j++) {
+      d[i + j] += (Math.random() * 2 - 1) * amp * (1 - j / dur);
+    }
+  }
+  _vinilBuf = b;
+  return b;
+}
 
 function musInicia() {
   if (musNoAr) return;
   try {
     const ctx = ctxAudio();
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-    const master = ctx.createGain();
-    master.gain.value = 0;
-    master.connect(ctx.destination);
 
-    /* pad: acordes lentos que deslizam de um para o outro (sem cortes secos) */
+    /* cadeia: instrumentos -> filtro escuro (look lo-fi) -> compressor (colagem) -> saída */
     const filtro = ctx.createBiquadFilter();
     filtro.type = 'lowpass';
-    filtro.frequency.value = 1000;
-    filtro.Q.value = 0.4;
-    filtro.connect(master);
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 0.05;
-    const lfoG = ctx.createGain();
-    lfoG.gain.value = 260;
-    lfo.connect(lfoG).connect(filtro.frequency);
-    lfo.start();
-
-    const oscs = [];
-    for (let i = 0; i < 5; i++) {
-      const o = ctx.createOscillator();
-      o.type = 'sine';
-      o.detune.value = i % 2 ? 4 : -4;        /* brilho levemente desafinado = calor */
-      const g = ctx.createGain();
-      g.gain.value = i === 4 ? 0.025 : 0.075;
-      o.connect(g).connect(filtro);
-      o.start();
-      oscs.push(o);
-    }
-    let idx = 0;
-    const troca = () => {
-      const notas = ACORDES_MUS[idx % ACORDES_MUS.length];
-      oscs.forEach((o, i) => {
-        const f = notas[i % notas.length] * (i === 4 ? 2 : 1);
-        try { o.frequency.setTargetAtTime(f, ctx.currentTime, 2.8); } catch (e) {}
-      });
-      idx++;
-    };
-    troca();
-    const timer = setInterval(troca, 9000);
-
-    /* ruído marrom bem leve = sensação de vento/chuva distante */
-    const len = Math.floor(ctx.sampleRate * 2);
-    const nbuf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const nd = nbuf.getChannelData(0);
-    let z = 0;
-    for (let i = 0; i < len; i++) {
-      z = z * 0.985 + (Math.random() * 2 - 1) * 0.015;
-      nd[i] = z * 4;
-    }
-    const ruido = ctx.createBufferSource();
-    ruido.buffer = nbuf;
-    ruido.loop = true;
-    const nf = ctx.createBiquadFilter();
-    nf.type = 'lowpass';
-    nf.frequency.value = 650;
-    const ng = ctx.createGain();
-    ng.gain.value = 0.09;
-    ruido.connect(nf).connect(ng).connect(master);
-    ruido.start();
-
-    /* reverbinho curto: soa "no espaço", leve */
+    filtro.frequency.value = 5600;
+    filtro.Q.value = 0.6;
+    const comp = ctx.createDynamicsCompressor();
+    try {
+      comp.threshold.value = -14; comp.knee.value = 18;
+      comp.ratio.value = 2.5; comp.attack.value = 0.008; comp.release.value = 0.12;
+    } catch (e) {}
+    const master = ctx.createGain();
+    master.gain.value = 0;
+    filtro.connect(comp).connect(master).connect(ctx.destination);
     try {
       const rev = ctx.createConvolver();
       rev.buffer = irCurta(ctx, 0.9);
       const wet = ctx.createGain();
-      wet.gain.value = 0.14;
-      filtro.connect(rev).connect(wet).connect(master);
+      wet.gain.value = 0.1;
+      filtro.connect(rev).connect(wet).connect(comp);
     } catch (e) {}
 
+    /* "wow" da fita: teclas tremendo de tom bem devagar */
+    const wob = ctx.createOscillator();
+    wob.frequency.value = 0.35;
+    const wobG = ctx.createGain();
+    wobG.gain.value = 7;                                 /* ±7 cents */
+    wob.connect(wobG);
+    wob.start();
+
+    /* chiado de vinil em loop por cima de tudo */
+    const vinil = ctx.createBufferSource();
+    vinil.buffer = vinilBuf(ctx);
+    vinil.loop = true;
+    const vg = ctx.createGain();
+    vg.gain.value = 0.4;
+    vinil.connect(vg).connect(filtro);
+    vinil.start();
+
+    const step = 60 / LOFI_BPM / 4;                      /* colcheia com ponte (swing) */
+    const compasso = step * 16;
+
+    const tecla = (f, t, vol) => {
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = f;
+      o.detune.value = Math.random() < 0.5 ? 6 : -6;
+      try { wobG.connect(o.detune); } catch (e) {}
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.012);
+      g.gain.setTargetAtTime(0.0001, t + 0.012, 0.5);    /* decaimento tipo Rhodes */
+      o.connect(g).connect(filtro);
+      o.start(t); o.stop(t + 2.4);
+    };
+    const baixo = (f, t, vol) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.02);
+      g.gain.setTargetAtTime(0.0001, t + 0.02, 0.4);
+      o.connect(g).connect(filtro);
+      o.start(t); o.stop(t + 2.4);
+    };
+    const bumbo = (t) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(130, t);
+      o.frequency.exponentialRampToValueAtTime(46, t + 0.16);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.5, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+      o.connect(g).connect(filtro);
+      o.start(t); o.stop(t + 0.32);
+    };
+    const caixa = (t) => {
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = 190;
+      const go = ctx.createGain();
+      go.gain.setValueAtTime(0.0001, t);
+      go.gain.linearRampToValueAtTime(0.14, t + 0.005);
+      go.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+      o.connect(go).connect(filtro);
+      o.start(t); o.stop(t + 0.12);
+      const s = ctx.createBufferSource();
+      s.buffer = ruidoBuf(ctx);
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1700;
+      bp.Q.value = 0.9;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.2, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+      s.connect(bp).connect(g).connect(filtro);
+      s.start(t, Math.random() * 0.3);
+      s.stop(t + 0.15);
+    };
+    const chapeu = (t, aberto) => {
+      const s = ctx.createBufferSource();
+      s.buffer = ruidoBuf(ctx);
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 3800;
+      const g = ctx.createGain();
+      const d = aberto ? 0.18 : 0.045;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(aberto ? 0.05 : 0.075, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      s.connect(hp).connect(g).connect(filtro);
+      s.start(t, Math.random() * 0.3);
+      s.stop(t + d + 0.03);
+    };
+
+    let compassoIdx = 0;
+    let t0 = ctx.currentTime + 0.15;
+    const agendaCompasso = (t, n) => {
+      const c = ACORDES_MUS[Math.floor(n / 2) % ACORDES_MUS.length];
+      const primeiro = n % 2 === 0;
+      /* bumbo: "boom ... bap-boom"; caixa no 2 e 4; chapéus em semicolcheias com swing */
+      [0, 10].forEach(s => bumbo(t + s * step));
+      [4, 12].forEach(s => caixa(t + s * step));
+      [0, 2, 4, 6, 8, 10, 12, 14].forEach(s => {
+        const swing = (s % 4 === 2) ? step * 0.6 : 0;    /* semicolcheias atrasadas */
+        chapeu(t + s * step + swing, !primeiro && s === 14);
+      });
+      /* teclas + baixo */
+      if (primeiro) {
+        c.notas.forEach((f, i) => tecla(f, t + 0.005, 0.05 - i * 0.006));
+        baixo(c.baixo, t + 0.005, 0.16);
+        baixo(c.baixo, t + 10 * step, 0.1);
+      } else {
+        [c.notas[0], c.notas[2], c.notas[3]].forEach((f, i) =>
+          tecla(f, t + 0.005, 0.035 - i * 0.005));
+        baixo(c.baixo, t + 0.005, 0.12);
+        tecla(c.notas[1], t + 10 * step, 0.03);          /* resposta sincopada */
+      }
+    };
+    const agenda = () => {
+      while (t0 < ctx.currentTime + 1.2) {
+        agendaCompasso(t0, compassoIdx);
+        t0 += compasso;
+        compassoIdx++;
+      }
+    };
+    agenda();
+    const timer = setInterval(agenda, 400);
+
     master.gain.setTargetAtTime(musVolAlvo(), ctx.currentTime, 1.1);
-    mus = { ctx, master, oscs, lfo, ruido, timer };
+    mus = { ctx, master, timer, vinil, wob };
     musNoAr = true;
   } catch (e) { /* sem áudio disponível */ }
 }
 
 function musPara() {
   if (!mus) { musNoAr = false; return; }
-  const { ctx, master, oscs, lfo, ruido, timer } = mus;
+  const { ctx, master, timer, vinil, wob } = mus;
   clearInterval(timer);
   try { master.gain.setTargetAtTime(0, ctx.currentTime, 0.45); } catch (e) {}
   setTimeout(() => {
-    try { oscs.forEach(o => o.stop()); } catch (e) {}
-    try { lfo.stop(); } catch (e) {}
-    try { ruido.stop(); } catch (e) {}
+    try { vinil.stop(); } catch (e) {}
+    try { wob.stop(); } catch (e) {}
     try { master.disconnect(); } catch (e) {}
   }, 1400);
   mus = null;
@@ -1273,7 +1350,7 @@ function setMusica(on, avisa = true) {
   if (els.btnMusica) els.btnMusica.classList.toggle('on', ligado);
   if (els.musicaFundo) els.musicaFundo.checked = ligado;
   if (ligado) musInicia(); else musPara();
-  if (avisa) toast(ligado ? 'Música relaxante ligada.' : 'Música desligada.');
+  if (avisa) toast(ligado ? 'Música lo-fi ligada.' : 'Música desligada.');
 }
 
 if (els.btnMusica) els.btnMusica.onclick = () => setMusica(!musicaDesejada());
