@@ -434,6 +434,9 @@
       <button class="btn btn-icon" id="btnSpeak" title="Ler em voz alta" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3l4.5-3.5v12L7 14.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M17.8 6.6a7.5 7.5 0 0 1 0 10.8"/></svg>
       </button>
+      <button class="btn btn-icon" id="btnMusica" title="Música de fundo relaxante">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17V5l10-2v12"/><circle cx="6.5" cy="17" r="2.5"/><circle cx="16.5" cy="15" r="2.5"/></svg>
+      </button>
       <button class="btn btn-icon" id="btnType" title="Ajustar texto (fonte e coluna)" hidden>
         <span class="aa">Aa</span>
       </button>
@@ -547,6 +550,13 @@
     </div>
     <input type="range" id="volRange" min="0.1" max="1" step="0.05" value="1"
       title="Mais suave ou mais alto">
+  </div>
+  <div class="type-row">
+    <span class="type-label">Música de fundo</span>
+    <label class="switch" title="Música relaxante tocando durante a leitura">
+      <input type="checkbox" id="musicaFundo">
+      <span class="switch-ui"></span>
+    </label>
   </div>
   <div class="type-row">
     <span class="type-label">Modo soneca</span>

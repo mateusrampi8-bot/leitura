@@ -30,14 +30,14 @@ const els = {
   hlPop: $('#hlPop'), hlRemove: $('#hlRemove'), hlHead: $('#hlHead'), hlList: $('#hlList'),
   findBar: $('#findBar'), findInput: $('#findInput'), findCount: $('#findCount'),
   findPrev: $('#findPrev'), findNext: $('#findNext'), findClose: $('#findClose'),
-  btnFind: $('#btnFind'), btnSpeak: $('#btnSpeak'),
+  btnFind: $('#btnFind'), btnSpeak: $('#btnSpeak'), btnMusica: $('#btnMusica'),
   fontMinus: $('#fontMinus'), fontPlus: $('#fontPlus'), fontVal: $('#fontVal'),
   widthSeg: $('#widthSeg'), fontSeg: $('#fontSeg'),
   voiceSel: $('#voiceSel'),
   velRange: $('#velRange'), velVal: $('#velVal'),
   pitchRange: $('#pitchRange'), pitchVal: $('#pitchVal'),
   volRange: $('#volRange'), volVal: $('#volVal'),
-  noiteVoice: $('#noiteVoice'),
+  noiteVoice: $('#noiteVoice'), musicaFundo: $('#musicaFundo'),
   btnAdd: $('#btnAdd'), btnAddSide: $('#btnAddSide'), btnAddLib: $('#btnAddLib'),
   btnModeTop: $('#btnModeTop'),   btnExport: $('#btnExport'), btnImport: $('#btnImport'),
   fileBackup: $('#fileBackup'),
@@ -842,6 +842,7 @@ function setSpeaking(v) {
     if (kokoroFonte) { try { kokoroFonte.stop(); } catch (e) {} kokoroFonte = null; }
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   }
+  try { ajustaMusica(v); } catch (e) {}
 }
 
 async function coletarPartes(maxTam) {
@@ -862,6 +863,26 @@ async function coletarPartes(maxTam) {
   return nos.length ? nos.flatMap(t => dividirTexto(t, maxTam)) : null;
 }
 
+/* Impulso curto de reverberação sintético (barulho que decai) — cache por duração */
+const _irs = {};
+function irCurta(ctx, dur) {
+  const k = String(dur);
+  if (_irs[k]) return _irs[k];
+  const sr = ctx.sampleRate;
+  const buf = ctx.createBuffer(2, Math.floor(sr * dur), sr);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    let z = 0;
+    for (let i = 0; i < d.length; i++) {
+      const t = i / d.length;
+      z = z * 0.55 + (Math.random() * 2 - 1) * 0.45;      /* já abafado (sem chiado) */
+      d[i] = z * 2.2 * Math.pow(1 - t, 2.5);
+    }
+  }
+  _irs[k] = buf;
+  return buf;
+}
+
 /* Leitura com voz neural: pede um WAV por trecho ao servidor local e toca via WebAudio */
 async function lerComKokoro(voz, partes, proxima) {
   const meuId = ++kokoroLoop;
@@ -879,19 +900,32 @@ async function lerComKokoro(voz, partes, proxima) {
       const noite = noiteVoz();
       const fonte = ctx.createBufferSource();
       fonte.buffer = audio;
-      /* Tom: -40 cents extras no modo soneca (discreto, sem deixar a voz "espessa") */
-      fonte.detune.value = Math.round((vozPitch() - 1) * 1200) - (noite ? 40 : 0);
+      /* Tom: a soneca NÃO mexe no tom nem na velocidade (isso distorce a voz neural) */
+      fonte.detune.value = Math.round((vozPitch() - 1) * 1200);
       /* nuvem não recebe a velocidade do servidor: aplica no próprio áudio */
       if (voz.indexOf('nuvem:') === 0) fonte.playbackRate = vozVel();
       const ganho = ctx.createGain();
-      ganho.gain.value = vozVol() * (noite ? 0.7 : 1);          /* Volume */
+      ganho.gain.value = vozVol() * (noite ? 0.62 : 1);         /* Volume */
       if (noite) {
-        /* soneca: corte suave dos agudos -> voz macia p/ dormir, ainda clara */
+        /* soneca: leve corte de brilho + dinâmica macia + reverbinho curto
+           -> som suave e arejado (como um susurro), sem virar "pesado" */
         const filtro = ctx.createBiquadFilter();
         filtro.type = 'lowpass';
-        filtro.frequency.value = 2900;
-        filtro.Q.value = 0.5;
-        fonte.connect(filtro).connect(ganho);
+        filtro.frequency.value = 4200;
+        filtro.Q.value = 0.4;
+        const comp = ctx.createDynamicsCompressor();
+        try {
+          comp.threshold.value = -20; comp.knee.value = 30;
+          comp.ratio.value = 2; comp.attack.value = 0.03; comp.release.value = 0.35;
+        } catch (e) {}
+        fonte.connect(filtro).connect(comp).connect(ganho);
+        try {
+          const rev = ctx.createConvolver();
+          rev.buffer = irCurta(ctx, 0.7);
+          const wet = ctx.createGain();
+          wet.gain.value = 0.15;
+          comp.connect(rev).connect(wet).connect(ganho);
+        } catch (e) {}
       } else {
         fonte.connect(ganho);
       }
@@ -906,11 +940,8 @@ async function lerComKokoro(voz, partes, proxima) {
 
   let idx = 0;
   const buscarParte = (parte) => {
-    /* soneca: pede ao Kokoro uma fala natural mais lenta (qualidade total, sem virar robô) */
-    const velPedir = (voz.indexOf('kokoro:') === 0 && noiteVoz())
-      ? Math.round(vozVel() * 90) / 100 : vozVel();
     const url = vozBase + '?texto=' + encodeURIComponent(parte) +
-      '&voz=' + encodeURIComponent(voz) + '&vel=' + velPedir;
+      '&voz=' + encodeURIComponent(voz) + '&vel=' + vozVel();
     const tentar = () => fetch(url, { signal: ac.signal })
       .then(async resp => {
         /* Google às vezes recusa por excesso: espera um pouco e tenta de novo */
@@ -1077,6 +1108,7 @@ function sincronizaSliderVoz() {
   els.pitchRange.value = vozPitch();
   els.volRange.value = vozVol();
   if (els.noiteVoice) els.noiteVoice.checked = noiteVoz();
+  if (els.musicaFundo) els.musicaFundo.checked = musicaDesejada();
   atualizaRotulosVoz();
 }
 
@@ -1115,9 +1147,137 @@ els.voiceSel.onchange = () => {
 els.noiteVoice.onchange = () => {
   localStorage.setItem(VOZ_NOITE, els.noiteVoice.checked ? '1' : '0');
   toast(els.noiteVoice.checked
-    ? 'Modo soneca ligado — voz suave e mais lenta para dormir.'
+    ? 'Modo soneca ligado — voz suave como um susurro.'
     : 'Modo soneca desligado.');
 };
+
+/* ================= Música de fundo relaxante (sintetizada no navegador) ================= */
+const MUSICA_KEY = 'leitura:musica';
+const ACORDES_MUS = [
+  [130.81, 164.81, 196.00, 246.94],   /* Cmaj7 */
+  [110.00, 130.81, 164.81, 196.00],   /* Am7   */
+  [ 87.31, 110.00, 130.81, 164.81],   /* Fmaj7 */
+  [ 98.00, 123.47, 146.83, 196.00]    /* G     */
+];
+let mus = null;                        /* { ctx, master, oscs, lfo, ruido, timer } */
+let musNoAr = false;
+let musFalando = false;
+
+function musicaDesejada() { return localStorage.getItem(MUSICA_KEY) === '1'; }
+function musVolAlvo() { return musFalando ? 0.17 : 0.32; }   /* abaixa p/ falar por cima */
+
+function musInicia() {
+  if (musNoAr) return;
+  try {
+    const ctx = ctxAudio();
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    const master = ctx.createGain();
+    master.gain.value = 0;
+    master.connect(ctx.destination);
+
+    /* pad: acordes lentos que deslizam de um para o outro (sem cortes secos) */
+    const filtro = ctx.createBiquadFilter();
+    filtro.type = 'lowpass';
+    filtro.frequency.value = 1000;
+    filtro.Q.value = 0.4;
+    filtro.connect(master);
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 0.05;
+    const lfoG = ctx.createGain();
+    lfoG.gain.value = 260;
+    lfo.connect(lfoG).connect(filtro.frequency);
+    lfo.start();
+
+    const oscs = [];
+    for (let i = 0; i < 5; i++) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.detune.value = i % 2 ? 4 : -4;        /* brilho levemente desafinado = calor */
+      const g = ctx.createGain();
+      g.gain.value = i === 4 ? 0.025 : 0.075;
+      o.connect(g).connect(filtro);
+      o.start();
+      oscs.push(o);
+    }
+    let idx = 0;
+    const troca = () => {
+      const notas = ACORDES_MUS[idx % ACORDES_MUS.length];
+      oscs.forEach((o, i) => {
+        const f = notas[i % notas.length] * (i === 4 ? 2 : 1);
+        try { o.frequency.setTargetAtTime(f, ctx.currentTime, 2.8); } catch (e) {}
+      });
+      idx++;
+    };
+    troca();
+    const timer = setInterval(troca, 9000);
+
+    /* ruído marrom bem leve = sensação de vento/chuva distante */
+    const len = Math.floor(ctx.sampleRate * 2);
+    const nbuf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const nd = nbuf.getChannelData(0);
+    let z = 0;
+    for (let i = 0; i < len; i++) {
+      z = z * 0.985 + (Math.random() * 2 - 1) * 0.015;
+      nd[i] = z * 4;
+    }
+    const ruido = ctx.createBufferSource();
+    ruido.buffer = nbuf;
+    ruido.loop = true;
+    const nf = ctx.createBiquadFilter();
+    nf.type = 'lowpass';
+    nf.frequency.value = 650;
+    const ng = ctx.createGain();
+    ng.gain.value = 0.09;
+    ruido.connect(nf).connect(ng).connect(master);
+    ruido.start();
+
+    /* reverbinho curto: soa "no espaço", leve */
+    try {
+      const rev = ctx.createConvolver();
+      rev.buffer = irCurta(ctx, 0.9);
+      const wet = ctx.createGain();
+      wet.gain.value = 0.14;
+      filtro.connect(rev).connect(wet).connect(master);
+    } catch (e) {}
+
+    master.gain.setTargetAtTime(musVolAlvo(), ctx.currentTime, 1.1);
+    mus = { ctx, master, oscs, lfo, ruido, timer };
+    musNoAr = true;
+  } catch (e) { /* sem áudio disponível */ }
+}
+
+function musPara() {
+  if (!mus) { musNoAr = false; return; }
+  const { ctx, master, oscs, lfo, ruido, timer } = mus;
+  clearInterval(timer);
+  try { master.gain.setTargetAtTime(0, ctx.currentTime, 0.45); } catch (e) {}
+  setTimeout(() => {
+    try { oscs.forEach(o => o.stop()); } catch (e) {}
+    try { lfo.stop(); } catch (e) {}
+    try { ruido.stop(); } catch (e) {}
+    try { master.disconnect(); } catch (e) {}
+  }, 1400);
+  mus = null;
+  musNoAr = false;
+}
+
+function ajustaMusica(falando) {
+  musFalando = !!falando;
+  if (!musNoAr || !mus) return;
+  try { mus.master.gain.setTargetAtTime(musVolAlvo(), mus.ctx.currentTime, 0.7); } catch (e) {}
+}
+
+function setMusica(on, avisa = true) {
+  const ligado = !!on;
+  localStorage.setItem(MUSICA_KEY, ligado ? '1' : '0');
+  if (els.btnMusica) els.btnMusica.classList.toggle('on', ligado);
+  if (els.musicaFundo) els.musicaFundo.checked = ligado;
+  if (ligado) musInicia(); else musPara();
+  if (avisa) toast(ligado ? 'Música relaxante ligada.' : 'Música desligada.');
+}
+
+if (els.btnMusica) els.btnMusica.onclick = () => setMusica(!musicaDesejada());
+if (els.musicaFundo) els.musicaFundo.onchange = () => setMusica(els.musicaFundo.checked);
 
 /* ================= Exportar anotações (Markdown) ================= */
 function slugify(s) {
@@ -2058,6 +2218,7 @@ function pokeChrome() {
 async function openItem(item) {
   currentItem = item;
   els.reader.hidden = false;
+  if (musicaDesejada()) musInicia();
   document.body.style.overflow = 'hidden';
   noteShownKey = null;
   hlPosKey = null;
@@ -2133,6 +2294,7 @@ async function closeReader() {
   hlPosKey = null;
   closeFind();
   if (speaking) setSpeaking(false);
+  if (musNoAr) musPara();
   els.reader.hidden = true;
   els.btnSpeak.hidden = true;
   els.notesPanel.hidden = true;
@@ -3253,6 +3415,12 @@ document.addEventListener('keydown', (e) => {
     toast('Armazenamento local indisponível. Use o iniciar.bat para abrir o app.', 6000);
   }
   setView('home');
+
+  /* música de fundo: restaura só o visual; começa ao abrir um livro (precisa de clique) */
+  if (musicaDesejada()) {
+    if (els.btnMusica) els.btnMusica.classList.add('on');
+    if (els.musicaFundo) els.musicaFundo.checked = true;
+  }
 
   /* Sem conta não pode usar: trava no login (ou cadastro, se veio da apresentação) */
   const params = new URLSearchParams(location.search);
